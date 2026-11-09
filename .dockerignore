@@ -1,0 +1,11 @@
+.git
+.DS_Store
+.env*
+node_modules
+build
+.react-router
+dev
+test
+*.md
+Dockerfile
+Makefile
