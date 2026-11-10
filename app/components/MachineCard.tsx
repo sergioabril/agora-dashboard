@@ -30,7 +30,7 @@ export function MachineCard({ id, machine: m, deployments, active, busy, disable
   return (
     <CardFrame
       id={`m-${id}`}
-      title={<b>{id}</b>}
+      title={<b>{m.name}</b>}
       status={<Status tone={display.led} pulse={display.pulse} label={display.label} />}
       bottom={`checked ${ago(m.checked_at, now)}`}
       busy={busy}
@@ -48,7 +48,7 @@ export function MachineCard({ id, machine: m, deployments, active, busy, disable
           <Switch
             on={on}
             disabled={disabled}
-            label={`Power ${id}`}
+            label={`Power ${m.name}`}
             holdLabel="hold to power off"
             tapLabel="tap to power on"
             onToggle={onToggle}
@@ -57,6 +57,8 @@ export function MachineCard({ id, machine: m, deployments, active, busy, disable
     >
       <AsciiArt device={m.device} display={display} />
       <dl className="kv">
+        <dt>id</dt>
+        <dd>{id}</dd>
         <dt>host</dt>
         <dd className="host">{m.host}</dd>
         <dt>roles</dt>

@@ -40,7 +40,7 @@ async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text, label }: { text: string; label: string }) {
   const [state, setState] = useState<null | boolean>(null);
   const ref = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -52,7 +52,7 @@ function CopyButton({ text }: { text: string }) {
     timer.current = setTimeout(() => setState(null), 1600);
   }
   return (
-    <button ref={ref} type="button" className={`copy${state ? " done" : ""}`} aria-label="Copy endpoint URL" onClick={onClick}>
+    <button ref={ref} type="button" className={`copy${state ? " done" : ""}`} aria-label={label} onClick={onClick}>
       {state === null ? "⎘ copy" : state ? "✓ copied" : "✗ copy failed"}
     </button>
   );
@@ -95,7 +95,7 @@ export function DeploymentCard({ id, deployment: d, machines, active, busy, disa
           </div>
           <div className="ep">
             <span className="ep-url">{d.endpoint}</span>
-            <CopyButton text={d.endpoint} />
+            <CopyButton text={d.endpoint} label="Copy endpoint URL" />
           </div>
         </div>
       </div>
@@ -117,7 +117,7 @@ export function DeploymentCard({ id, deployment: d, machines, active, busy, disa
             d.machines.map((mid) => (
               <span key={mid} className={`chip node${mid === d.head ? " head" : ""}`}>
                 <Led tone={tones[mid].tone} pulse={tones[mid].pulse} />
-                {mid}
+                {machines[mid]?.name ?? mid}
                 {mid === d.head && <span className="r">HEAD</span>}
               </span>
             ))

@@ -71,7 +71,9 @@ export function LastOp({ op, now }: { op: Operation | null; now: number }) {
       </>
     );
   }
-  const mark = op.status === "succeeded" ? <span className="ok">✓</span> : <span className="bad">✗</span>;
+  const mark = op.status === "succeeded" ? <span className="ok">✓</span>
+    : op.status === "cancelled" ? <><span className="bad">✗</span> <span className="muted">cancelled</span></>
+    : <span className="bad">✗</span>;
   return (
     <>
       <span className="op-a">{op.action}</span> {mark} <span className="op-t">{hhmm(op.finished_at ?? op.started_at, now)}</span>

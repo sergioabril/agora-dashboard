@@ -2,7 +2,7 @@
 
 ## 1. Intro
 
-Agora Dashboard is a small server-rendered web app (PWA) for observing agora-hub's machines and deployments and switching them on/off or starting/stopping them. It keeps no state of its own: every view and action goes through the hub's admin API.
+Agora Dashboard is a small server-rendered web app (PWA) for observing agora-hub's machines and deployments, switching them on/off or starting/stopping them, and adding machines. It keeps no state of its own: every view and action goes through the hub's admin API.
 
 ## 2. Quick install
 
@@ -13,33 +13,40 @@ git clone <repository-url> agora-dashboard
 cd agora-dashboard
 ```
 
-Configure (use the same admin token as agora-hub):
+Docker (the only supported way to run the image):
+
+```sh
+make deploy
+```
+
+`make deploy` creates `~/.config/agora/agora-dashboard/` (mode `0700`, and any missing parent folder) and, only if it is missing, `.env` (mode `0600`) from the defaults: `AGORA_HUB_URL=http://host.docker.internal:3333` and no token. Without flags it never overwrites an existing `.env`. It then builds the image and starts the dashboard in the background on port `4444`, with the config folder mounted read-only at `/config`. The container uses `--restart unless-stopped`, so it comes back after a crash, a Docker restart or a reboot. Run `make deploy` again to rebuild and replace it. Use `make deploy CONFIG_DIR=/other/path` for a different folder.
+
+Logs: `docker logs -f agora-dashboard`. Undeploy: `docker rm -f agora-dashboard`.
+
+Hook it to agora-hub:
+
+```sh
+make deploy                                      # hub on this machine, no token
+make deploy HUB_HOST=192.168.1.20                # hub on another machine
+make deploy HUB_TOKEN=<the hub's api.admin_token>
+make deploy HUB_HOST=192.168.1.20 HUB_TOKEN=<the hub's api.admin_token>
+```
+
+The flags are saved into `~/.config/agora/agora-dashboard/.env` (created first if missing), replacing only those values; later runs without flags keep them. `HUB_HOST` takes an IP or hostname only (no scheme, no port), and the hub is expected on port `3333`. Never use `127.0.0.1` or `localhost`: inside the container they point at the dashboard itself. For a hub on the same machine, leave `HUB_HOST` out. To go back to the defaults, pass `HUB_TOKEN=REPLACE_WITH_HUB_TOKEN` and `HUB_HOST=host.docker.internal`. Alternatively, edit `.env` by hand and run `docker restart agora-dashboard`; the app re-reads `/config/.env` on every start.
+
+Token: agora-hub's `api.admin_token` is either empty (no authentication, the default after the hub's `make deploy`) or 64 hex characters. If it is empty, leave `AGORA_HUB_ADMIN_TOKEN=REPLACE_WITH_HUB_TOKEN` in `~/.config/agora/agora-dashboard/.env`, and the dashboard sends no token. If it is set, run `make deploy HUB_TOKEN=<that value>`, or put it in `AGORA_HUB_ADMIN_TOKEN` and run `docker restart agora-dashboard`. A mismatch shows **HUB REJECTED TOKEN**. The dashboard has no login of its own: anyone who can open port `4444` can control the hub through it.
+
+Native (Node 24), as an alternative to Docker. Copy `.env.example` into the config folder, set `AGORA_HUB_URL=http://127.0.0.1:3333` and the token as above (the `make deploy` flags don't apply here: edit the file by hand):
 
 ```sh
 CONFIG_DIR="$HOME/.config/agora/agora-dashboard"
 mkdir -p "$CONFIG_DIR" && chmod 700 "$CONFIG_DIR"
 cp .env.example "$CONFIG_DIR/.env" && chmod 600 "$CONFIG_DIR/.env"
-# edit it: AGORA_HUB_URL=http://127.0.0.1:3333 natively,
-#          http://host.docker.internal:3333 in Docker; and the hub's token
-```
-
-Native (Node 24):
-
-```sh
 npm ci && npm run build
-node --env-file="$HOME/.config/agora/agora-dashboard/.env" \
-  node_modules/@react-router/serve/bin.cjs ./build/server/index.js
+node --env-file="$CONFIG_DIR/.env" node_modules/@react-router/serve/bin.cjs ./build/server/index.js
 ```
 
-Docker:
-
-```sh
-make build
-docker run --rm --name agora-dashboard \
-  --publish 4444:4444 \
-  --env-file "$HOME/.config/agora/agora-dashboard/.env" \
-  agora-dashboard:local
-```
+Docker and native share this one `.env`, with different `AGORA_HUB_URL` values (`http://host.docker.internal:3333` in Docker, `http://127.0.0.1:3333` natively). If you switch, change the URL: `make deploy` never rewrites an existing file.
 
 Open `http://<host>:4444`. For development without a real hub, run `npm run fake-hub` (port 3334) and `npm run dev` with `.env.example` copied to `.env`.
 
@@ -47,11 +54,13 @@ Open `http://<host>:4444`. For development without a real hub, run `npm run fake
 
 | Variable | Meaning |
 | --- | --- |
-| `AGORA_HUB_URL` | agora-hub base URL (`http://127.0.0.1:3333` native, `http://host.docker.internal:3333` in Docker) |
-| `AGORA_HUB_ADMIN_TOKEN` | The hub's 64-hex admin token; stays on the server |
-| `PORT` | Listen port, default `4444` |
+| `AGORA_HUB_URL` | agora-hub base URL (`http://host.docker.internal:3333` in Docker, `http://127.0.0.1:3333` native) |
+| `AGORA_HUB_ADMIN_TOKEN` | `REPLACE_WITH_HUB_TOKEN` (the default) or empty: no token is sent, for a hub with an empty `api.admin_token`. Otherwise the hub's exact 64-hex `api.admin_token`, sent as `Authorization: Bearer <token>`; it stays on the server |
+| `PORT` | Native only: listen port, default `4444` (Docker always uses `4444`) |
 
-The app refuses to start if the URL or token is missing or malformed.
+The app refuses to start if the URL is missing or malformed, or if the token is anything other than the values above (the value is never printed).
+
+After adding a machine, run `ssh-keyscan -H <host> >> ~/.config/agora/agora-hub/known_hosts` on the hub's host. Until then the hub can't verify its SSH host key and the card shows **auth error**; no restart is needed.
 
 Icons: replace the placeholders in `public/icons/` with files of the same name and size, then rebuild. `icon-192.png` (192×192), `icon-512.png` (512×512) and `icon-maskable-512.png` (512×512, content inside the safe zone) are referenced by `public/manifest.webmanifest`; `apple-touch-icon.png` (180×180) and `favicon.svg` are linked from the page head.
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher, useFetchers } from "react-router";
 import type { Route } from "./+types/home";
+import { AddMachine } from "../components/AddMachine";
 import { Banner } from "../components/Banner";
 import { Boot, PowerOn, type BootResult } from "../components/Boot";
 import type { Busy } from "../components/Card";
@@ -12,10 +13,10 @@ import { Ps1 } from "../components/Ps1";
 import { Rail } from "../components/Rail";
 import { SkeletonGrid } from "../components/Skeleton";
 import { Toasts, type ToastData } from "../components/Toast";
-import { deploymentAction, deploymentsStatus, machineAction, machinesStatus } from "../hub.server";
+import { addMachine, deploymentAction, deploymentsStatus, machineAction, machinesStatus } from "../hub.server";
 import {
-  actionResult, parseAction, pendingActive, toastFor, toggleAction, usePolling,
-  type ActionRequest, type ActionResult, type Kind, type Pending,
+  actionResult, addResult, parseAction, parseMachine, pendingActive, toastFor, toggleAction, usePolling,
+  type ActionRequest, type ActionResult, type AddResult, type Kind, type Pending,
 } from "../live";
 import { deploymentDisplay, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval } from "../model";
 import type { DeploymentsStatus, HubError, HubResult, MachinesStatus } from "../types";
@@ -30,8 +31,10 @@ export function loader() {
   return { now: t0, machines: timed(machinesStatus()), deployments: timed(deploymentsStatus()) };
 }
 
-export async function action({ request }: Route.ActionArgs): Promise<ActionResult> {
-  const parsed = parseAction(Object.fromEntries(await request.formData()));
+export async function action({ request }: Route.ActionArgs): Promise<ActionResult | AddResult> {
+  const fields = Object.fromEntries(await request.formData());
+  if (fields.intent === "add") return addResult(await addMachine(parseMachine(fields)));
+  const parsed = parseAction(fields);
   if (!parsed.ok) return parsed;
   const { kind, id, action } = parsed.request;
   const r = kind === "machine" ? await machineAction(id, action as "on" | "off") : await deploymentAction(id, action as "start" | "stop");
@@ -44,13 +47,17 @@ function Toggle({ kind, id, onResult, children }: { kind: Kind; id: string; onRe
   const fetcher = useFetcher<typeof action>({ key: `${kind}:${id}` });
   const sent = useRef<ActionRequest | null>(null);
   useEffect(() => {
-    if (fetcher.data && sent.current) onResult(sent.current, fetcher.data);
+    const data = fetcher.data;
+    if (data && sent.current && !("machine" in data)) onResult(sent.current, data);
   }, [fetcher.data, onResult]);
   return children((next) => {
     sent.current = { kind, id, action: toggleAction(kind, next) };
     void fetcher.submit(sent.current, { method: "post" });
   });
 }
+
+const names = (records: Record<string, { name: string }> | undefined) =>
+  Object.fromEntries(Object.entries(records ?? {}).map(([id, r]) => [id, r.name]));
 
 const bootOf = <T,>(t: { result: HubResult<T>; ms: number }, count: (d: T) => number): BootResult =>
   t.result.ok ? { ok: true, ms: t.ms, count: count(t.result.data) } : { ok: false, error: t.result.error.message };
@@ -106,7 +113,7 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
     return () => clearInterval(t);
   }, []);
 
-  const sending = new Set(fetchers.filter((f) => f.state !== "idle").map((f) => f.key));
+  const sending = new Set(fetchers.filter((f) => f.state !== "idle" && /^(machine|deployment):/.test(f.key)).map((f) => f.key));
   const active = hubActive(machines, deployments) ?? pendingActive(pending, deployments);
   const refresh = usePolling(pollInterval(machines, deployments, sending.size > 0 || pending !== null), inflight || sending.size > 0);
 
@@ -135,19 +142,23 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
           <div className="banners" aria-live="polite">
             {error?.kind === "unauthorized" && <Banner kind="rejected" />}
             {error && error.kind !== "unauthorized" && <Banner kind="offline" message={error.message} lastOkAt={lastOkAt} />}
-            {active && <Banner kind="busy" active={active} startedAt={startedAt} now={now} />}
+            {active && <Banner kind="busy" active={active} startedAt={startedAt} now={now}
+              machineNames={names(machines?.machines)} deploymentNames={names(deployments?.deployments)} />}
           </div>
           <Panel id="h-m" cmd="machines" noun="host" className={`grid-m${reveal ? " reveal" : ""}`}
             displays={machines && Object.values(machines.machines).map(machineDisplay)}>
             {machines && deployments
-              ? Object.entries(machines.machines).map(([id, m], i) => (
-                  <Toggle key={id} kind="machine" id={id} onResult={onResult}>
-                    {(toggle) => (
-                      <MachineCard id={id} machine={m} deployments={deployments.deployments} active={active}
-                        busy={busyOf(`machine:${id}`, machineInvolved(id, active))} disabled={disabled} now={now} index={i} onToggle={toggle} />
-                    )}
-                  </Toggle>
-                ))
+              ? <>
+                  {Object.entries(machines.machines).map(([id, m], i) => (
+                    <Toggle key={id} kind="machine" id={id} onResult={onResult}>
+                      {(toggle) => (
+                        <MachineCard id={id} machine={m} deployments={deployments.deployments} active={active}
+                          busy={busyOf(`machine:${id}`, machineInvolved(id, active))} disabled={disabled} now={now} index={i} onToggle={toggle} />
+                      )}
+                    </Toggle>
+                  ))}
+                  <AddMachine disabled={disabled} />
+                </>
               : <SkeletonGrid kind="machine" count={4} />}
           </Panel>
           <Panel id="h-d" cmd="deployments" noun="deployment" className={`grid-d${reveal ? " reveal" : ""}`}

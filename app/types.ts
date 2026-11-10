@@ -1,4 +1,4 @@
-export type OperationStatus = "in_progress" | "succeeded" | "failed";
+export type OperationStatus = "in_progress" | "succeeded" | "failed" | "cancelled";
 
 export type Operation = {
   action: string;
@@ -12,6 +12,7 @@ export type Operation = {
 export type Active = { action: string; target: string; machines: string[] };
 
 export type Machine = {
+  name: string;
   host: string;
   device: string;
   reachable: boolean;
@@ -35,6 +36,18 @@ export type Deployment = {
   errors: string[];
   checked_at: string;
   operation: Operation | null;
+};
+
+export type AddedMachine = {
+  id: string;
+  name: string;
+  host: string;
+  user: string;
+  port: number;
+  key_path: string | null;
+  shutdown_command: string;
+  plug_entity_id: string;
+  device: string;
 };
 
 export type MachinesStatus = { machines: Record<string, Machine>; active: Active | null };

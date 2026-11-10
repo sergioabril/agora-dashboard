@@ -1,4 +1,5 @@
 import type {
+  AddedMachine,
   DeploymentAction,
   DeploymentsStatus,
   HubError,
@@ -20,10 +21,10 @@ function readConfig(env: NodeJS.ProcessEnv) {
   if (!parsed || !["http:", "https:"].includes(parsed.protocol)) {
     throw new Error("agora-dashboard: AGORA_HUB_URL must be an http(s) URL, e.g. http://127.0.0.1:3333");
   }
-  if (!token || !/^[0-9a-fA-F]{64}$/.test(token)) {
-    throw new Error("agora-dashboard: AGORA_HUB_ADMIN_TOKEN must be the hub's 64-hex admin token");
+  if (token && token !== "REPLACE_WITH_HUB_TOKEN" && !/^[0-9a-fA-F]{64}$/.test(token)) {
+    throw new Error("agora-dashboard: AGORA_HUB_ADMIN_TOKEN must be REPLACE_WITH_HUB_TOKEN, empty, or the hub's 64-hex admin token");
   }
-  return { base: parsed.href.replace(/\/+$/, ""), token };
+  return { base: parsed.href.replace(/\/+$/, ""), token: token === "REPLACE_WITH_HUB_TOKEN" ? "" : token };
 }
 
 const config = readConfig(process.env);
@@ -65,7 +66,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: object): 
     response = await fetch(config.base + path, {
       method,
       headers: {
-        Authorization: `Bearer ${config.token}`,
+        ...(config.token ? { Authorization: `Bearer ${config.token}` } : {}),
         Accept: "application/json",
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
@@ -97,3 +98,6 @@ export const machineAction = (id: string, action: MachineAction) =>
 
 export const deploymentAction = (id: string, action: DeploymentAction) =>
   request<Operation>("POST", `/admin/deployments/${encodeURIComponent(id)}`, { action });
+
+export const addMachine = (machine: Record<string, string | number>) =>
+  request<AddedMachine>("POST", "/admin/machines/add", machine);

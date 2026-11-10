@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionResult, parseAction, pendingActive, toastFor } from "../app/live";
+import { actionResult, parseAction, parseMachine, pendingActive, toastFor } from "../app/live";
 import type { Operation } from "../app/types";
 
 const op: Operation = { action: "on", status: "in_progress", started_at: "2026-11-09T08:00:00+00:00", finished_at: null, error: null, output: "" };
@@ -18,6 +18,14 @@ describe("action allowlist", () => {
     ]) {
       expect(parseAction(bad)).toMatchObject({ ok: false, status: 422, code: "invalid_request" });
     }
+  });
+});
+
+describe("add machine form", () => {
+  it("keeps known non-empty fields, trims text but not passwords, and parses the port", () => {
+    expect(parseMachine({ intent: "add", id: "x", name: " Spark 5 ", host: "spark-5.local", user: "agora", port: "2222",
+      password: " p w ", key_path: "", sudo_password: "", shutdown_command: "  " })).toEqual({
+      name: "Spark 5", host: "spark-5.local", user: "agora", port: 2222, password: " p w " });
   });
 });
 

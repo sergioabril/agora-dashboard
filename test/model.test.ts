@@ -7,7 +7,7 @@ import type { Deployment, DeploymentsStatus, Machine, MachinesStatus, Operation 
 
 const at = "2026-11-09T08:00:41.000000+00:00";
 const machine = (over: Partial<Machine> = {}): Machine => ({
-  host: "h", device: "dgx-spark", reachable: true, error: null, checked_at: at, shutdown_requested: false, operation: null, ...over,
+  name: "M", host: "h", device: "dgx-spark", reachable: true, error: null, checked_at: at, shutdown_requested: false, operation: null, ...over,
 });
 const deployment = (over: Partial<Deployment> = {}): Deployment => ({
   name: "Pro", endpoint: "http://x/", machines: ["spark-1", "spark-2"], head: "spark-1", observed_state: "stopped",

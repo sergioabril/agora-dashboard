@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useRevalidator } from "react-router";
 import type { ToastData } from "./components/Toast";
-import type { Active, DeploymentAction, DeploymentsStatus, HubResult, MachineAction, Operation } from "./types";
+import type { Active, AddedMachine, DeploymentAction, DeploymentsStatus, HubError, HubResult, MachineAction, Operation } from "./types";
 
 export type Kind = "machine" | "deployment";
 export type ActionRequest = { kind: Kind; id: string; action: MachineAction | DeploymentAction };
@@ -13,6 +13,7 @@ export type ActionFailure = {
   blocking: Record<string, unknown> | null;
 };
 export type ActionResult = { ok: true; operation: Operation } | ActionFailure;
+export type AddResult = { ok: true; machine: AddedMachine } | ActionFailure;
 export type Pending = ActionRequest & { since: number };
 
 const ALLOWED: Record<Kind, readonly string[]> = { machine: ["on", "off"], deployment: ["start", "stop"] };
@@ -30,10 +31,29 @@ export function parseAction(fields: Record<string, unknown>): { ok: true; reques
   return { ok: true, request: { kind, id, action: action as ActionRequest["action"] } };
 }
 
+const failure = (e: HubError): ActionFailure =>
+  ({ ok: false, status: e.status, code: e.code ?? e.kind, message: e.message, blocking: e.blocking ?? null });
+
 export function actionResult(r: HubResult<Operation>): ActionResult {
-  if (r.ok) return { ok: true, operation: r.data };
-  const e = r.error;
-  return { ok: false, status: e.status, code: e.code ?? e.kind, message: e.message, blocking: e.blocking ?? null };
+  return r.ok ? { ok: true, operation: r.data } : failure(r.error);
+}
+
+export function addResult(r: HubResult<AddedMachine>): AddResult {
+  return r.ok ? { ok: true, machine: r.data } : failure(r.error);
+}
+
+const MACHINE_FIELDS = ["name", "host", "user", "port", "password", "key_path", "sudo_password", "plug_entity_id", "device", "shutdown_command"];
+export const SECRET_FIELDS = ["password", "sudo_password"];
+
+export function parseMachine(fields: Record<string, unknown>): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const k of MACHINE_FIELDS) {
+    const raw = fields[k];
+    if (typeof raw !== "string") continue;
+    const v = SECRET_FIELDS.includes(k) ? raw : raw.trim();
+    if (v !== "") out[k] = k === "port" && /^\d+$/.test(v) ? Number(v) : v;
+  }
+  return out;
 }
 
 function describeBlocking(b: Record<string, unknown> | null): string | null {

@@ -1,8 +1,10 @@
 // Dev-only fake agora-hub on :3334 (never :3333). Ports test-webs/mock.js with the real hub's error bodies.
+import crypto from "node:crypto";
 import http from "node:http";
 
 const PORT = 3334;
-const TOKEN = process.env.AGORA_HUB_ADMIN_TOKEN || "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const TOKEN = process.env.AGORA_HUB_ADMIN_TOKEN?.trim() ?? "";
+const OPEN = !TOKEN || TOKEN === "REPLACE_WITH_HUB_TOKEN";
 const H = 3600e3;
 const iso = (msAgo = 0) => new Date(Date.now() - msAgo).toISOString().replace("Z", "000+00:00");
 const op = (action, status, startedAgo, durationMs, error = null, output = "") => ({
@@ -14,14 +16,14 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const latency = () => wait(250 + Math.random() * 600);
 
 const machines = {
-  "spark-1": { host: "spark-1.local", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false,
+  "spark-1": { name: "Spark 1", host: "spark-1.local", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false,
     operation: op("on", "succeeded", 5 * H, 97e3, null, "ha: switch.spark_1 off -> on\nssh: spark-1.local:22 reachable after 91s") },
-  "spark-2": { host: "spark-2.local", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false, operation: null },
-  "spark-3": { host: "192.168.1.43", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false, operation: null },
-  "spark-4": { host: "spark-4.local", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false, operation: null },
-  "studio-1": { host: "studio-1.local", device: "mac-studio", reachable: false, error: "connect: [Errno 64] Host is down", shutdown_requested: true,
+  "spark-2": { name: "Spark 2", host: "spark-2.local", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false, operation: null },
+  "spark-3": { name: "Spark 3", host: "192.168.1.43", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false, operation: null },
+  "spark-4": { name: "Spark 4", host: "spark-4.local", device: "dgx-spark", reachable: true, error: null, shutdown_requested: false, operation: null },
+  "studio-1": { name: "Studio 1", host: "studio-1.local", device: "mac-studio", reachable: false, error: "connect: [Errno 64] Host is down", shutdown_requested: true,
     operation: op("off", "succeeded", 14 * H, 21e3, null, "Connection to studio-1.local closed by remote host.") },
-  "rtx-1": { host: "10.0.0.61", device: "rtx6000", reachable: false, error: "timeout: ssh connect to 10.0.0.61:22 timed out after 10s", shutdown_requested: false,
+  "rtx-1": { name: "RTX 1", host: "10.0.0.61", device: "rtx6000", reachable: false, error: "timeout: ssh connect to 10.0.0.61:22 timed out after 10s", shutdown_requested: false,
     operation: op("on", "failed", 2 * H, 180e3, "machine did not become reachable before timeout", "ha: switch.rtx_1 off -> on\nssh: waiting for 10.0.0.61:22 ...") },
 };
 const deployments = {
@@ -141,12 +143,49 @@ function validate(raw, allowed) {
   return body.action;
 }
 
+const FIELDS = ["name", "host", "user", "port", "password", "key_path", "sudo_password", "plug_entity_id", "device", "shutdown_command"];
+const DEVICES = ["dgx-spark", "rtx6000", "mac-studio"];
+
+function addMachine(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {}
+  const b = {};
+  for (const [k, v] of Object.entries(parsed && typeof parsed === "object" ? parsed : {})) if (v != null) b[k] = v;
+  const invalid = (at, msg) => [422, { detail: `invalid configuration at ${at}: ${msg}` }];
+  const required = "Field required";
+  if (!("name" in b)) return invalid("name", required);
+  if (!String(b.name).trim()) return invalid("name", "String should have at least 1 character");
+  if (!("host" in b)) return invalid("host", required);
+  if (!("user" in b)) return invalid("user", required);
+  if ("port" in b && !(Number.isInteger(b.port) || /^\s*[+-]?\d+\s*$/.test(String(b.port)))) {
+    return invalid("port", "Input should be a valid integer, unable to parse string as an integer");
+  }
+  if (!("plug_entity_id" in b)) return invalid("plug_entity_id", required);
+  if ("device" in b && !DEVICES.includes(b.device)) return invalid("device", "Input should be 'dgx-spark', 'rtx6000' or 'mac-studio'");
+  const extra = Object.keys(b).find((k) => !FIELDS.includes(k));
+  if (extra) return invalid(extra, "Extra inputs are not permitted");
+  if (!("password" in b) && !("key_path" in b)) return invalid("", "Value error, password or key_path is required");
+  let id;
+  do id = crypto.randomBytes(4).toString("hex");
+  while (machines[id]);
+  const m = {
+    id, name: String(b.name).trim(), host: b.host, user: b.user, port: b.port == null ? 22 : Number(b.port),
+    key_path: b.key_path ?? null, shutdown_command: b.shutdown_command ?? "sudo -S -p '' poweroff",
+    plug_entity_id: b.plug_entity_id, device: b.device ?? "dgx-spark",
+  };
+  machines[id] = { name: m.name, host: m.host, device: m.device, reachable: true,
+    error: `host_key: Host key is not trusted for host ${m.host}`, shutdown_requested: false, operation: null };
+  return [201, m];
+}
+
 async function route(method, path, raw) {
   if (method === "GET" && path === "/admin/machines/status") {
     await latency();
     const out = {};
     for (const [id, m] of Object.entries(machines)) {
-      out[id] = { host: m.host, device: m.device, reachable: m.reachable, error: m.error,
+      out[id] = { name: m.name, host: m.host, device: m.device, reachable: m.reachable, error: m.error,
         checked_at: iso(), shutdown_requested: m.shutdown_requested, operation: clone(m.operation) };
     }
     return [200, { machines: out, active: clone(active) }];
@@ -156,6 +195,10 @@ async function route(method, path, raw) {
     const out = {};
     for (const id of Object.keys(deployments)) out[id] = deploymentObservation(id);
     return [200, { deployments: out, active: clone(active) }];
+  }
+  if (method === "POST" && path === "/admin/machines/add") {
+    await latency();
+    return addMachine(raw);
   }
   const match = method === "POST" && path.match(/^\/admin\/(machines|deployments)\/([^/]+)$/);
   if (!match) return [404, { detail: "Not Found" }];
@@ -179,7 +222,7 @@ http.createServer((req, res) => {
   req.on("data", (chunk) => (raw += chunk));
   req.on("end", async () => {
     const path = new URL(req.url, "http://fake").pathname;
-    const [status, body] = req.headers.authorization === `Bearer ${TOKEN}`
+    const [status, body] = OPEN || req.headers.authorization === `Bearer ${TOKEN}`
       ? await route(req.method, path, raw)
       : [401, { detail: "Unauthorized" }];
     console.log(`${req.method} ${path} -> ${status}`);

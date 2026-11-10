@@ -13,4 +13,4 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/build ./build
 USER node
 EXPOSE 4444
-CMD ["node", "node_modules/@react-router/serve/bin.cjs", "./build/server/index.js"]
+CMD ["node", "--env-file=/config/.env", "node_modules/@react-router/serve/bin.cjs", "./build/server/index.js"]

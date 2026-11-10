@@ -59,6 +59,15 @@ describe("hub client", () => {
     });
   });
 
+  it("posts a new machine as JSON and maps a 422 detail string", async () => {
+    const detail = "invalid configuration at : Value error, password or key_path is required";
+    const fetch = stub(422, { detail });
+    expect(await hub.addMachine({ name: "Spark 5", port: 22 })).toEqual({ ok: false, error: { kind: "invalid", status: 422, message: detail } });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://hub.test:3334/admin/machines/add");
+    expect(init).toMatchObject({ method: "POST", body: '{"name":"Spark 5","port":22}' });
+  });
+
   it("maps network failures to offline and aborts to timeout", async () => {
     stubThrow(new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } }));
     expect(await hub.deploymentsStatus()).toMatchObject({ ok: false, error: { kind: "offline", message: "hub unreachable (ECONNREFUSED)" } });
@@ -79,12 +88,23 @@ describe("startup validation", () => {
   it.each([
     [{ AGORA_HUB_URL: "", AGORA_HUB_ADMIN_TOKEN: TOKEN }, /AGORA_HUB_URL/],
     [{ AGORA_HUB_URL: "ftp://hub", AGORA_HUB_ADMIN_TOKEN: TOKEN }, /AGORA_HUB_URL/],
-    [{ AGORA_HUB_URL: "http://hub", AGORA_HUB_ADMIN_TOKEN: "short" }, /AGORA_HUB_ADMIN_TOKEN/],
+    [{ AGORA_HUB_URL: "http://hub", AGORA_HUB_ADMIN_TOKEN: "short" }, "agora-dashboard: AGORA_HUB_ADMIN_TOKEN must be REPLACE_WITH_HUB_TOKEN, empty, or the hub's 64-hex admin token"],
   ])("rejects bad config %#", async (env, pattern) => {
     vi.resetModules();
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
     const failure = import("../app/hub.server");
     await expect(failure).rejects.toThrow(pattern);
     await expect(failure).rejects.not.toThrow(/short/);
+  });
+
+  it.each(["REPLACE_WITH_HUB_TOKEN", ""])("sends no Authorization header with token %j", async (token) => {
+    vi.resetModules();
+    vi.stubEnv("AGORA_HUB_URL", "http://hub.test");
+    vi.stubEnv("AGORA_HUB_ADMIN_TOKEN", token);
+    const noAuth = await import("../app/hub.server");
+    const fetch = stub(200, { machines: {}, active: null });
+    expect(await noAuth.machinesStatus()).toMatchObject({ ok: true });
+    const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.headers).not.toHaveProperty("Authorization");
   });
 });

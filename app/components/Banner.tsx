@@ -3,13 +3,14 @@ import type { Active } from "../types";
 import { ActiveGlyph } from "./Spinner";
 
 export type BannerProps =
-  | { kind: "busy"; active: Active; startedAt: string | null; now: number }
+  | { kind: "busy"; active: Active; machineNames: Record<string, string>; deploymentNames: Record<string, string>; startedAt: string | null; now: number }
   | { kind: "offline"; message: string; lastOkAt: number | null }
   | { kind: "rejected" };
 
 export function Banner(props: BannerProps) {
   if (props.kind === "busy") {
-    const { active, startedAt, now } = props;
+    const { active, machineNames, deploymentNames, startedAt, now } = props;
+    const targetNames = ["start", "stop"].includes(active.action) ? deploymentNames : ["on", "off"].includes(active.action) ? machineNames : {};
     return (
       <div className="banner busy" role="status">
         <span className="bn-tag">HUB BUSY</span>
@@ -17,9 +18,9 @@ export function Banner(props: BannerProps) {
           <ActiveGlyph />
         </span>
         <span className="bn-msg">
-          <b>{active.action}</b> <b className="hi">{active.target}</b>
+          <b>{active.action}</b> <b className="hi">{targetNames[active.target] ?? active.target}</b>
           <i>·</i>
-          <span className="mc">{active.machines.join(" ")}</span>
+          <span className="mc">{active.machines.map((id) => machineNames[id] ?? id).join(", ")}</span>
         </span>
         <span className="bn-meta">
           controls locked{startedAt && ` · ${elapsed(startedAt, now)}`}
