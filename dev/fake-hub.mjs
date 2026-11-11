@@ -146,7 +146,8 @@ function validate(raw, allowed) {
 const FIELDS = ["name", "host", "user", "port", "password", "key_path", "sudo_password", "plug_entity_id", "device", "shutdown_command"];
 const DEVICES = ["dgx-spark", "rtx6000", "mac-studio"];
 
-function addMachine(raw) {
+// test mirrors POST /admin/machines/test: password "wrong" is refused and a host starting with "down" is unreachable.
+function machineRequest(raw, test) {
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -167,6 +168,11 @@ function addMachine(raw) {
   const extra = Object.keys(b).find((k) => !FIELDS.includes(k));
   if (extra) return invalid(extra, "Extra inputs are not permitted");
   if (!("password" in b) && !("key_path" in b)) return invalid("", "Value error, password or key_path is required");
+  if (test) {
+    if (String(b.host).startsWith("down")) return [200, { reachable: false, error: "connect: [Errno 64] Host is down" }];
+    if (b.password === "wrong") return [200, { reachable: true, error: `auth: Permission denied for user ${b.user} on host ${b.host}` }];
+    return [200, { reachable: true, error: null }];
+  }
   let id;
   do id = crypto.randomBytes(4).toString("hex");
   while (machines[id]);
@@ -175,8 +181,8 @@ function addMachine(raw) {
     key_path: b.key_path ?? null, shutdown_command: b.shutdown_command ?? "sudo -S -p '' poweroff",
     plug_entity_id: b.plug_entity_id, device: b.device ?? "dgx-spark",
   };
-  machines[id] = { name: m.name, host: m.host, device: m.device, reachable: true,
-    error: `host_key: Host key is not trusted for host ${m.host}`, shutdown_requested: false, operation: null };
+  machines[id] = { name: m.name, host: m.host, device: m.device, reachable: true, error: null,
+    shutdown_requested: false, operation: null };
   return [201, m];
 }
 
@@ -196,9 +202,9 @@ async function route(method, path, raw) {
     for (const id of Object.keys(deployments)) out[id] = deploymentObservation(id);
     return [200, { deployments: out, active: clone(active) }];
   }
-  if (method === "POST" && path === "/admin/machines/add") {
+  if (method === "POST" && (path === "/admin/machines/add" || path === "/admin/machines/test")) {
     await latency();
-    return addMachine(raw);
+    return machineRequest(raw, path.endsWith("/test"));
   }
   const match = method === "POST" && path.match(/^\/admin\/(machines|deployments)\/([^/]+)$/);
   if (!match) return [404, { detail: "Not Found" }];

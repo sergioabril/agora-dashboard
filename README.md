@@ -60,7 +60,7 @@ Open `http://<host>:4444`. For development without a real hub, run `npm run fake
 
 The app refuses to start if the URL is missing or malformed, or if the token is anything other than the values above (the value is never printed).
 
-After adding a machine, run `ssh-keyscan -H <host> >> ~/.config/agora/agora-hub/known_hosts` on the hub's host. Until then the hub can't verify its SSH host key and the card shows **auth error**; no restart is needed.
+In the add form, **test ssh** asks the hub to try the SSH login with the entered host, port, user and password or key, without saving the machine; the result shows in the form. A newly added machine needs no extra step: the hub trusts its SSH host key on the first connection. If a machine's key changes later (for example after a reinstall), its card shows **auth error** until the old key is removed from the hub's `known_hosts` (see the agora-hub README).
 
 Icons: replace the placeholders in `public/icons/` with files of the same name and size, then rebuild. `icon-192.png` (192×192), `icon-512.png` (512×512) and `icon-maskable-512.png` (512×512, content inside the safe zone) are referenced by `public/manifest.webmanifest`; `apple-touch-icon.png` (180×180) and `favicon.svg` are linked from the page head.
 

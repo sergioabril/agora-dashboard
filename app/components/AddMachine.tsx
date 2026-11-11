@@ -3,13 +3,11 @@ import { useFetcher } from "react-router";
 import { DEVICES, deviceLabel } from "../ascii";
 import { SECRET_FIELDS } from "../live";
 import type { action } from "../routes/home";
-import { CopyButton } from "./DeploymentCard";
 import { Ps1 } from "./Ps1";
 import { MonoSpin } from "./Spinner";
 
 const TEXT = { type: "text", autoComplete: "off" } as const;
 const SECRET = { type: "password", autoComplete: "new-password" } as const;
-const keyscan = (host: string) => `ssh-keyscan -H ${host} >> ~/.config/agora/agora-hub/known_hosts`;
 
 function Field({ name, wide, ...input }: { name: string; wide?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
@@ -20,19 +18,28 @@ function Field({ name, wide, ...input }: { name: string; wide?: boolean } & Reac
   );
 }
 
-export function AddMachine({ disabled }: { disabled: boolean }) {
-  const fetcher = useFetcher<typeof action>({ key: "add-machine" });
-  const [open, setOpen] = useState(false);
+// A keyed fetcher keeps its last data across opens; only data that arrived after `mark()` counts.
+function useSubmission(key: string) {
+  const fetcher = useFetcher<typeof action>({ key });
   const [sent, setSent] = useState<{ base: unknown } | null>(null);
+  const busy = sent !== null && fetcher.state !== "idle";
+  const data = sent && !busy && fetcher.data !== sent.base ? fetcher.data : undefined;
+  return { fetcher, busy, data, mark: () => setSent({ base: fetcher.data }), reset: () => setSent(null) };
+}
+
+export function AddMachine({ disabled }: { disabled: boolean }) {
+  const add = useSubmission("add-machine");
+  const check = useSubmission("test-machine");
+  const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const tile = useRef<HTMLButtonElement>(null);
   const done = useRef<HTMLButtonElement>(null);
 
-  const sending = sent !== null && fetcher.state !== "idle";
-  const data = sent && !sending && fetcher.data !== sent.base ? fetcher.data : undefined;
-  const added = data && "machine" in data ? data.machine : null;
-  const failure = data && !data.ok ? data : null;
+  const added = add.data && "machine" in add.data ? add.data.machine : null;
+  const failure = add.data && !add.data.ok ? add.data : null;
+  const login = check.data && "login" in check.data ? check.data.login : null;
+  const testError = check.data && !check.data.ok ? `${check.data.status ?? "request failed"} · ${check.data.message}` : login?.error;
 
   useEffect(() => {
     if (!open) return;
@@ -51,8 +58,17 @@ export function AddMachine({ disabled }: { disabled: boolean }) {
 
   function show() {
     if (open || disabled) return;
-    setSent(null);
+    add.reset();
+    check.reset();
     setOpen(true);
+  }
+  function test() {
+    const f = form.current;
+    if (!f || check.busy || !f.reportValidity()) return;
+    const fields = new FormData(f);
+    fields.set("intent", "test");
+    check.mark();
+    void check.fetcher.submit(fields, { method: "post" });
   }
   const close = () => dialog.current?.close();
   function onClose() {
@@ -74,8 +90,8 @@ export function AddMachine({ disabled }: { disabled: boolean }) {
           <div className="fr-body">
             <div className="win-cmd" aria-hidden="true"><Ps1 /> <span className="c2">machines --add</span></div>
             {open && (
-              <fetcher.Form ref={form} method="post" className={`af${sending ? " is-sending" : ""}`} aria-busy={sending}
-                onSubmit={(e) => (sending ? e.preventDefault() : setSent({ base: fetcher.data }))}>
+              <add.fetcher.Form ref={form} method="post" className={`af${add.busy ? " is-sending" : ""}`} aria-busy={add.busy}
+                onInput={check.reset} onSubmit={(e) => (add.busy ? e.preventDefault() : add.mark())}>
                 <input type="hidden" name="intent" value="add" />
                 <div className="af-grid" hidden={Boolean(added)}>
                   <Field name="name" {...TEXT} required wide />
@@ -101,22 +117,21 @@ export function AddMachine({ disabled }: { disabled: boolean }) {
                 {added ? (
                   <div className="af-done">
                     <p><span className="ok">✓ 201</span> added <b className="v">{added.name}</b> <span className="muted">· id</span> <span className="v">{added.id}</span></p>
-                    <p className="muted">next · on the hub's host, trust its SSH host key:</p>
-                    <div className="af-cmd">
-                      <span className="sh" aria-hidden="true">$</span><code>{keyscan(added.host)}</code>
-                      <CopyButton text={keyscan(added.host)} label="Copy ssh-keyscan command" />
-                    </div>
-                    <p className="af-note">until then its card shows <span className="bad">auth error</span> · no hub restart needed</p>
                     <div className="af-act"><button ref={done} type="button" className="btn" onClick={close}>done</button></div>
                   </div>
                 ) : (
-                  <div className="af-act">
-                    <button type="submit" className="btn af-go">{sending ? <><MonoSpin /> sending…</> : "add host"}</button>
-                    <button type="button" className="btn ghost" onClick={close}>cancel</button>
-                    <span className="af-st" role="status">{sending ? "POST /admin/machines/add" : ""}</span>
-                  </div>
+                  <>
+                    {testError && <p className="af-err" role="alert"><b>✗ ssh test</b> · {testError}</p>}
+                    {login && !login.error && <p className="af-ok" role="status"><b>✓ ssh test</b> · login accepted</p>}
+                    <div className="af-act">
+                      <button type="submit" className="btn af-go">{add.busy ? <><MonoSpin /> sending…</> : "add host"}</button>
+                      <button type="button" className="btn" onClick={test}>{check.busy ? <><MonoSpin /> testing…</> : "test ssh"}</button>
+                      <button type="button" className="btn ghost" onClick={close}>cancel</button>
+                      <span className="af-st" role="status">{add.busy ? "POST /admin/machines/add" : check.busy ? "POST /admin/machines/test" : ""}</span>
+                    </div>
+                  </>
                 )}
-              </fetcher.Form>
+              </add.fetcher.Form>
             )}
           </div>
           <div className="fr fr-bot">

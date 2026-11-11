@@ -50,6 +50,8 @@ export type AddedMachine = {
   device: string;
 };
 
+export type LoginTest = { reachable: boolean; error: string | null };
+
 export type MachinesStatus = { machines: Record<string, Machine>; active: Active | null };
 export type DeploymentsStatus = { deployments: Record<string, Deployment>; active: Active | null };
 

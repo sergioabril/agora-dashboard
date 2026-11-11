@@ -13,10 +13,10 @@ import { Ps1 } from "../components/Ps1";
 import { Rail } from "../components/Rail";
 import { SkeletonGrid } from "../components/Skeleton";
 import { Toasts, type ToastData } from "../components/Toast";
-import { addMachine, deploymentAction, deploymentsStatus, machineAction, machinesStatus } from "../hub.server";
+import { addMachine, deploymentAction, deploymentsStatus, machineAction, machinesStatus, testMachine } from "../hub.server";
 import {
-  actionResult, addResult, parseAction, parseMachine, pendingActive, toastFor, toggleAction, usePolling,
-  type ActionRequest, type ActionResult, type AddResult, type Kind, type Pending,
+  actionResult, addResult, parseAction, parseMachine, pendingActive, testResult, toastFor, toggleAction, usePolling,
+  type ActionRequest, type ActionResult, type AddResult, type Kind, type Pending, type TestResult,
 } from "../live";
 import { deploymentDisplay, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval } from "../model";
 import type { DeploymentsStatus, HubError, HubResult, MachinesStatus } from "../types";
@@ -31,9 +31,10 @@ export function loader() {
   return { now: t0, machines: timed(machinesStatus()), deployments: timed(deploymentsStatus()) };
 }
 
-export async function action({ request }: Route.ActionArgs): Promise<ActionResult | AddResult> {
+export async function action({ request }: Route.ActionArgs): Promise<ActionResult | AddResult | TestResult> {
   const fields = Object.fromEntries(await request.formData());
   if (fields.intent === "add") return addResult(await addMachine(parseMachine(fields)));
+  if (fields.intent === "test") return testResult(await testMachine(parseMachine(fields)));
   const parsed = parseAction(fields);
   if (!parsed.ok) return parsed;
   const { kind, id, action } = parsed.request;
@@ -48,7 +49,7 @@ function Toggle({ kind, id, onResult, children }: { kind: Kind; id: string; onRe
   const sent = useRef<ActionRequest | null>(null);
   useEffect(() => {
     const data = fetcher.data;
-    if (data && sent.current && !("machine" in data)) onResult(sent.current, data);
+    if (data && sent.current && ("operation" in data || !data.ok)) onResult(sent.current, data);
   }, [fetcher.data, onResult]);
   return children((next) => {
     sent.current = { kind, id, action: toggleAction(kind, next) };

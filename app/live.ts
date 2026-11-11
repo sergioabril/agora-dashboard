@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useRevalidator } from "react-router";
 import type { ToastData } from "./components/Toast";
-import type { Active, AddedMachine, DeploymentAction, DeploymentsStatus, HubError, HubResult, MachineAction, Operation } from "./types";
+import type { Active, AddedMachine, DeploymentAction, DeploymentsStatus, HubError, HubResult, LoginTest, MachineAction, Operation } from "./types";
 
 export type Kind = "machine" | "deployment";
 export type ActionRequest = { kind: Kind; id: string; action: MachineAction | DeploymentAction };
@@ -14,6 +14,7 @@ export type ActionFailure = {
 };
 export type ActionResult = { ok: true; operation: Operation } | ActionFailure;
 export type AddResult = { ok: true; machine: AddedMachine } | ActionFailure;
+export type TestResult = { ok: true; login: LoginTest } | ActionFailure;
 export type Pending = ActionRequest & { since: number };
 
 const ALLOWED: Record<Kind, readonly string[]> = { machine: ["on", "off"], deployment: ["start", "stop"] };
@@ -40,6 +41,10 @@ export function actionResult(r: HubResult<Operation>): ActionResult {
 
 export function addResult(r: HubResult<AddedMachine>): AddResult {
   return r.ok ? { ok: true, machine: r.data } : failure(r.error);
+}
+
+export function testResult(r: HubResult<LoginTest>): TestResult {
+  return r.ok ? { ok: true, login: r.data } : failure(r.error);
 }
 
 const MACHINE_FIELDS = ["name", "host", "user", "port", "password", "key_path", "sudo_password", "plug_entity_id", "device", "shutdown_command"];

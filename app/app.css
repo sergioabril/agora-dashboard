@@ -486,6 +486,9 @@ main{margin-left:var(--rw);padding:calc(28px + env(safe-area-inset-top)) clamp(1
 .af-err{margin:0;padding:7px 10px;border:1px solid rgba(191,97,106,.6);background:linear-gradient(90deg, rgba(191,97,106,.16), rgba(191,97,106,.04));
   color:#D9848C;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
 .af-err b{color:var(--red);font-weight:700}
+.af-ok{margin:0;padding:7px 10px;border:1px solid rgba(163,190,140,.5);background:linear-gradient(90deg, rgba(163,190,140,.14), rgba(163,190,140,.03));
+  color:var(--fg);font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}
+.af-ok b{color:var(--green);font-weight:700}
 .af-act{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .af-act .ghost{color:var(--fg-2);text-shadow:none}
 .af-st{flex:1;min-width:0;text-align:right;font-size:11px;color:var(--fg-3)}
@@ -494,11 +497,6 @@ main{margin-left:var(--rw);padding:calc(28px + env(safe-area-inset-top)) clamp(1
 .af-done{display:flex;flex-direction:column;gap:10px;font-size:12px;line-height:1.55}
 .af-done p{margin:0}
 .af-done .v{color:var(--fg-hi)}
-.af-cmd{display:flex;align-items:flex-start;gap:1ch;padding:8px 10px;border:1px solid rgba(76,86,106,.75);background:rgba(30,34,42,.9);box-shadow:inset 0 0 18px rgba(30,34,42,.9)}
-.af-cmd .sh{color:var(--f1);text-shadow:var(--glow-f)}
-.af-cmd code{flex:1;min-width:0;font:inherit;color:var(--fg-hi);overflow-wrap:anywhere}
-.af-cmd .copy{margin:0}
-.af-note{color:var(--fg-3);font-size:11.5px}
 dialog.addm{padding:0;border:0;margin:auto;background:transparent;color:inherit;overflow:visible;
   width:min(620px, calc(100vw - 28px));max-height:calc(100dvh - 28px)}
 dialog.addm::backdrop{background:rgba(30,34,42,.74);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}

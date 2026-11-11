@@ -4,6 +4,7 @@ import type {
   DeploymentsStatus,
   HubError,
   HubResult,
+  LoginTest,
   MachineAction,
   MachinesStatus,
   Operation,
@@ -101,3 +102,6 @@ export const deploymentAction = (id: string, action: DeploymentAction) =>
 
 export const addMachine = (machine: Record<string, string | number>) =>
   request<AddedMachine>("POST", "/admin/machines/add", machine);
+
+export const testMachine = (machine: Record<string, string | number>) =>
+  request<LoginTest>("POST", "/admin/machines/test", machine);

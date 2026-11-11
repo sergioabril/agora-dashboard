@@ -40,7 +40,7 @@ async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-export function CopyButton({ text, label }: { text: string; label: string }) {
+function CopyButton({ text }: { text: string }) {
   const [state, setState] = useState<null | boolean>(null);
   const ref = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -52,7 +52,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
     timer.current = setTimeout(() => setState(null), 1600);
   }
   return (
-    <button ref={ref} type="button" className={`copy${state ? " done" : ""}`} aria-label={label} onClick={onClick}>
+    <button ref={ref} type="button" className={`copy${state ? " done" : ""}`} aria-label="Copy endpoint URL" onClick={onClick}>
       {state === null ? "⎘ copy" : state ? "✓ copied" : "✗ copy failed"}
     </button>
   );
@@ -95,7 +95,7 @@ export function DeploymentCard({ id, deployment: d, machines, active, busy, disa
           </div>
           <div className="ep">
             <span className="ep-url">{d.endpoint}</span>
-            <CopyButton text={d.endpoint} label="Copy endpoint URL" />
+            <CopyButton text={d.endpoint} />
           </div>
         </div>
       </div>
