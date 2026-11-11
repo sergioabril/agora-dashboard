@@ -85,6 +85,10 @@ export function hubActive(
 
 export const FAST_POLL_MS = 3000;
 export const IDLE_POLL_MS = 15000;
+// The hub's status calls wait on SSH to every machine (~ssh_connect_seconds when one is off).
+// Streamed loader data must outlast them: promises still pending at the stream timeout reach the browser rejected.
+export const HUB_TIMEOUT_MS = 25_000;
+export const STREAM_TIMEOUT_MS = HUB_TIMEOUT_MS + 5_000;
 
 export function pollInterval(
   machines: MachinesStatus | null,

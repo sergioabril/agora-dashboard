@@ -9,8 +9,7 @@ import type {
   MachinesStatus,
   Operation,
 } from "./types";
-
-const TIMEOUT_MS = 25_000;
+import { HUB_TIMEOUT_MS } from "./model";
 
 function readConfig(env: NodeJS.ProcessEnv) {
   const url = env.AGORA_HUB_URL?.trim();
@@ -72,12 +71,12 @@ async function request<T>(method: "GET" | "POST", path: string, body?: object): 
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(HUB_TIMEOUT_MS),
     });
   } catch (caught) {
     const name = (caught as Error)?.name;
     if (name === "TimeoutError" || name === "AbortError") {
-      return { ok: false, error: { kind: "timeout", status: null, message: `hub did not answer within ${TIMEOUT_MS / 1000}s` } };
+      return { ok: false, error: { kind: "timeout", status: null, message: `hub did not answer within ${HUB_TIMEOUT_MS / 1000}s` } };
     }
     const code = ((caught as { cause?: { code?: string } })?.cause?.code) ?? "network error";
     return { ok: false, error: { kind: "offline", status: null, message: `hub unreachable (${code})` } };

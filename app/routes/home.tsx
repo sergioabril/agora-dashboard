@@ -18,7 +18,7 @@ import {
   actionResult, addResult, parseAction, parseMachine, pendingActive, testResult, toastFor, toggleAction, usePolling,
   type ActionRequest, type ActionResult, type AddResult, type Kind, type Pending, type TestResult,
 } from "../live";
-import { deploymentDisplay, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval } from "../model";
+import { deploymentDisplay, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS } from "../model";
 import type { DeploymentsStatus, HubError, HubResult, MachinesStatus } from "../types";
 
 export function meta() {
@@ -60,8 +60,20 @@ function Toggle({ kind, id, onResult, children }: { kind: Kind; id: string; onRe
 const names = (records: Record<string, { name: string }> | undefined) =>
   Object.fromEntries(Object.entries(records ?? {}).map(([id, r]) => [id, r.name]));
 
-const bootOf = <T,>(t: { result: HubResult<T>; ms: number }, count: (d: T) => number): BootResult =>
+type Timed<T> = { result: HubResult<T>; ms: number };
+
+const bootOf = <T,>(t: Timed<T>, count: (d: T) => number): BootResult =>
   t.result.ok ? { ok: true, ms: t.ms, count: count(t.result.data) } : { ok: false, error: t.result.error.message };
+
+// A streamed loader promise rejects when the server gives up on it, and never settles when the stream
+// dies (dashboard restarted mid-load): count both as a failed poll, so the page says so and keeps polling.
+function settled<T>(p: Promise<Timed<T>>): Promise<Timed<T>> {
+  const lost = (message: string): Timed<T> => ({ result: { ok: false, error: { kind: "offline", status: null, message } }, ms: 0 });
+  return Promise.race([
+    p.catch((caught: unknown) => lost(`dashboard stream broke (${(caught as Error)?.message ?? caught})`)),
+    new Promise<Timed<T>>((resolve) => setTimeout(() => resolve(lost("dashboard stream stalled")), STREAM_TIMEOUT_MS + 5_000)),
+  ]);
+}
 
 export default function Home({ loaderData: ld }: Route.ComponentProps) {
   const [machines, setMachines] = useState<MachinesStatus | null>(null);
@@ -81,7 +93,7 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
     let live = true;
     const startedAt = Date.now();
     setInflight(true);
-    void Promise.all([ld.machines, ld.deployments]).then(([m, d]) => {
+    void Promise.all([settled(ld.machines), settled(ld.deployments)]).then(([m, d]) => {
       if (!live) return;
       if (m.result.ok) setMachines(m.result.data);
       if (d.result.ok) setDeployments(d.result.data);
