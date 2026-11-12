@@ -221,13 +221,13 @@ export function useDeploymentLogs(deployments: DeploymentsStatus | null, callbac
       await readEvents(res.body, (e) => {
         if (e.type === "line") return set((l) => ({ ...l, lines: [...l.lines, { source: e.source, text: e.text, at: e.at }].slice(-MAX_LINES) }));
         if (e.type === "end") {
-          set((l) => ({ ...l, end: e.operation }));
+          set((l) => ({ ...l, op: e.operation }));
           if (live) r.callbacks.ended();
           return;
         }
         live = e.operation.status === "in_progress";
         if (!req) return;
-        r.logs = { ...r.logs, [id]: { startedAt: e.operation.started_at, lines: [], open: true, own: true, end: null } };
+        r.logs = { ...r.logs, [id]: { startedAt: e.operation.started_at, lines: [], open: true, own: true, op: e.operation } };
         setLogs(r.logs);
         unpost();
         r.callbacks.accepted(req, e.operation);
@@ -249,7 +249,7 @@ export function useDeploymentLogs(deployments: DeploymentsStatus | null, callbac
       const prev = r.logs[id];
       // A replay of our own operation (its stream dropped, or a stale poll) keeps it ours, so a failure still shows red.
       const own = prev?.startedAt === d.operation.started_at && prev.own;
-      r.logs = { ...r.logs, [id]: { startedAt: d.operation.started_at, lines: [], open: true, own, end: null } };
+      r.logs = { ...r.logs, [id]: { startedAt: d.operation.started_at, lines: [], open: true, own, op: d.operation } };
       setLogs(r.logs);
       void run(id, {}, null);
     }

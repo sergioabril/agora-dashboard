@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  deploymentDisplay, deploymentFailed, deploymentInvolved, deploymentOn, machineDisplay, machineInvolved, machineOn,
+  deploymentDisplay, deploymentFailed, deploymentInvolved, deploymentOn, machineDisplay, machineInvolved, machineOn, withLog,
   pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone, sortSwitches,
 } from "../app/model";
 import type { Deployment, DeploymentsStatus, Machine, MachinesStatus, Operation } from "../app/types";
@@ -46,14 +46,24 @@ describe("deployment display", () => {
   });
   it("is red failed only after this page's own failed stream of the same operation, once stopped", () => {
     const op: Operation = { ...running("start"), status: "failed", error: "start command exited 3" };
-    const log = { startedAt: at, lines: [], open: false, own: true, end: op };
+    const log = { startedAt: at, lines: [], open: false, own: true, op };
     const d = deployment({ operation: op });
     expect(deploymentFailed(d, log)).toBe(true);
     expect(deploymentFailed(d, { ...log, own: false })).toBe(false);
-    expect(deploymentFailed(d, { ...log, end: { ...op, status: "succeeded" } })).toBe(false);
+    expect(deploymentFailed(d, { ...log, op: { ...op, status: "succeeded" } })).toBe(false);
     expect(deploymentFailed(d, { ...log, startedAt: "2026-11-09T07:00:00+00:00" })).toBe(false);
     expect(deploymentFailed(deployment({ operation: op, observed_state: "starting" }), log)).toBe(false);
     expect(deploymentFailed(d, undefined)).toBe(false);
+  });
+  it("takes the own stream's newer operation until a poll catches up", () => {
+    const old: Operation = { ...running("start"), status: "failed", error: "start command exited 1" };
+    const next = { ...running("start"), started_at: "2026-11-09T09:00:00+00:00" };
+    const d = deployment({ operation: old });
+    const log = { startedAt: next.started_at, lines: [], open: true, own: true, op: next };
+    expect(withLog(d, log)).toMatchObject({ operation: next, observed_state: "starting" });
+    expect(withLog(d, { ...log, startedAt: at, op: old })).toBe(d);
+    expect(withLog(deployment({ operation: next }), log)).toEqual(deployment({ operation: next }));
+    expect(withLog(d, undefined)).toBe(d);
   });
 });
 

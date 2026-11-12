@@ -50,7 +50,14 @@ export function deploymentDisplay(d: Deployment, failed = false): Display {
 
 // Red "failed" only after this page's own start/stop stream ended failed and the deployment is now stopped.
 export function deploymentFailed(d: Deployment, log: DeploymentLog | undefined): boolean {
-  return Boolean(log?.own && log.end?.status === "failed" && log.startedAt === d.operation?.started_at && d.observed_state === "stopped");
+  return Boolean(log?.own && log.op.status === "failed" && log.startedAt === d.operation?.started_at && d.observed_state === "stopped");
+}
+
+// Until a poll catches up with this page's own start/stop, the stream's operation is fresher than the status.
+export function withLog(d: Deployment, log: DeploymentLog | undefined): Deployment {
+  if (!log || (d.operation && Date.parse(log.startedAt) <= Date.parse(d.operation.started_at))) return d;
+  const going = log.op.status === "in_progress";
+  return { ...d, operation: log.op, observed_state: going ? (log.op.action === "start" ? "starting" : "stopping") : d.observed_state };
 }
 
 export function machineOn(m: Machine): boolean {

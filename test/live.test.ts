@@ -114,7 +114,7 @@ describe("deployment log stream", () => {
   });
   it("follows a new operation or a dropped live stream, never while posting", () => {
     const d = (status: Operation["status"]) => ({ operation: { ...op, action: "start", status } }) as Deployment;
-    const log = (startedAt: string, open: boolean) => ({ startedAt, lines: [], open, own: false, end: null });
+    const log = (startedAt: string, open: boolean) => ({ startedAt, lines: [], open, own: false, op });
     expect(needsFollow(d("in_progress"), undefined, false)).toBe(true);
     expect(needsFollow(d("succeeded"), log("2026-11-09T07:00:00+00:00", false), false)).toBe(true);
     expect(needsFollow(d("succeeded"), log(op.started_at, false), false)).toBe(false);

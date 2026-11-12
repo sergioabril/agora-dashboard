@@ -21,7 +21,9 @@ import {
   actionResult, addResult, deploymentResult, parseAction, parseDeployment, parseMachine, pendingActive, testResult, toastFor, toggleAction,
   useDeploymentLogs, usePolling, type ActionRequest, type ActionResult, type AddResult, type DeploymentResult, type Pending, type TestResult,
 } from "../live";
-import { deploymentDisplay, deploymentFailed, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS } from "../model";
+import {
+  deploymentDisplay, deploymentFailed, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS, withLog,
+} from "../model";
 import type { DeploymentsStatus, HubError, HubResult, MachinesStatus } from "../types";
 
 export function meta() {
@@ -195,7 +197,10 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
               : <SkeletonGrid kind="machine" count={4} />}
           </Panel>
           <Panel id="h-d" cmd="deployments" noun="deployment" className={`grid-d${reveal ? " reveal" : ""}`}
-            displays={deployments && Object.entries(deployments.deployments).map(([id, d]) => deploymentDisplay(d, deploymentFailed(d, logs[id])))}>
+            displays={deployments && Object.entries(deployments.deployments).map(([id, raw]) => {
+              const d = withLog(raw, logs[id]);
+              return deploymentDisplay(d, deploymentFailed(d, logs[id]));
+            })}>
             {machines && deployments
               ? <>
                   {Object.entries(deployments.deployments).map(([id, d], i) => (

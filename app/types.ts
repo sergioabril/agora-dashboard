@@ -47,7 +47,8 @@ export type SavedDeployment = { id: string; name: string; machines: string[]; he
 
 export type LogLine = { source: "hub" | "stdout" | "stderr"; text: string; at: string };
 export type StreamEvent = { type: "operation" | "end"; operation: Operation } | ({ type: "line" } & LogLine);
-export type DeploymentLog = { startedAt: string; lines: LogLine[]; open: boolean; own: boolean; end: Operation | null };
+// `op` is the stream's operation: the first event's, then the `end` event's.
+export type DeploymentLog = { startedAt: string; lines: LogLine[]; open: boolean; own: boolean; op: Operation };
 
 export type AddedMachine = {
   id: string;

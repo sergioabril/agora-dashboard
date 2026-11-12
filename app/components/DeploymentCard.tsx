@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ago } from "../format";
-import { actionLabel, deploymentDisplay, deploymentFailed, deploymentOn, machineDisplay } from "../model";
+import { actionLabel, deploymentDisplay, deploymentFailed, deploymentOn, machineDisplay, withLog } from "../model";
 import type { Active, Deployment, DeploymentLog, Machine } from "../types";
 import { DeploymentDialog } from "./AddDeployment";
 import { useDialog } from "./AddMachine";
@@ -62,7 +62,8 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function DeploymentCard({ id, deployment: d, machines, active, log, openOn, busy, disabled, now, index, onToggle }: Props) {
+export function DeploymentCard({ id, deployment, machines, active, log, openOn, busy, disabled, now, index, onToggle }: Props) {
+  const d = withLog(deployment, log);
   const failed = deploymentFailed(d, log);
   const display = deploymentDisplay(d, failed);
   const same = log && log.startedAt === d.operation?.started_at ? log : null;
@@ -86,15 +87,16 @@ export function DeploymentCard({ id, deployment: d, machines, active, log, openO
         index={index}
         failed={failed}
         openOn={openOn}
-        op={same?.end ?? d.operation}
+        op={same?.op ?? d.operation}
         lines={same?.lines ?? null}
         live={Boolean(same?.open)}
-        hasError={Boolean((same?.end ?? d.operation)?.error)}
+        hasError={Boolean((same?.op ?? d.operation)?.error)}
         obs={{
           checkedAt: d.checked_at,
-          rows: [["observed", d.observed_state], ["ready", d.ready ? "yes" : "no"]],
-          errors: d.error ? [d.error] : [],
-          okNote: "endpoint answered 2xx",
+          // A failing probe is expected while not running, so it is a plain row, not a red error.
+          rows: [["observed", d.observed_state], ["ready", d.ready ? "yes" : "no"], ...(d.error ? [["probe", d.error] as [string, string]] : [])],
+          errors: [],
+          okNote: d.ready ? "endpoint answered 2xx" : undefined,
         }}
         busyLabel={active ? actionLabel(active.action) : "sending"}
         control={
