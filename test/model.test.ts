@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deploymentDisplay, deploymentInvolved, deploymentOn, machineDisplay, machineInvolved, machineOn,
-  pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone,
+  pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone, sortSwitches,
 } from "../app/model";
 import type { Deployment, DeploymentsStatus, Machine, MachinesStatus, Operation } from "../app/types";
 
@@ -93,5 +93,10 @@ describe("home assistant display", () => {
     expect(homeAssistantDisplay(ha, ok(true, "http: 401"))).toEqual({ led: "red", pulse: false, label: "rejected" });
     expect(homeAssistantDisplay(ha, ok(false, "http: refused"))).toEqual({ led: "orange", pulse: false, label: "offline" });
     expect(["on", "off", "unavailable"].map(switchTone)).toEqual(["green", "dim", "orange"]);
+  });
+  it("sorts switches: machine plugs, then free on, free off, unavailable", () => {
+    const sw = (entity_id: string, state: string, machines: string[] = []) => ({ entity_id, name: entity_id, state, machines });
+    const list = [sw("a", "unavailable"), sw("b", "off"), sw("c", "on"), sw("d", "unavailable", ["m1"]), sw("e", "off", ["m2"]), sw("f", "unknown"), sw("g", "on")];
+    expect(sortSwitches(list).map((s) => s.entity_id)).toEqual(["d", "e", "c", "g", "b", "a", "f"]);
   });
 });

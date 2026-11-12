@@ -1,4 +1,6 @@
-import type { Active, Deployment, DeploymentsStatus, HomeAssistantSettings, HubResult, LoginTest, Machine, MachinesStatus } from "./types";
+import type {
+  Active, Deployment, DeploymentsStatus, HomeAssistantSettings, HomeAssistantSwitch, HubResult, LoginTest, Machine, MachinesStatus,
+} from "./types";
 
 export type LedColor = "green" | "yellow" | "red" | "orange" | "dim";
 export type Display = { led: LedColor; pulse: boolean; label: string };
@@ -35,6 +37,10 @@ export function homeAssistantDisplay(settings: HomeAssistantSettings, check: "pe
 }
 
 export const switchTone = (state: string): LedColor => (state === "on" ? "green" : state === "off" ? "dim" : "orange");
+
+// Plugs of configured machines first, then free switches that are on, then off, then unavailable/unknown; hub order within a group.
+const switchRank = (s: HomeAssistantSwitch) => (s.machines.length ? 0 : s.state === "on" ? 1 : s.state === "off" ? 2 : 3);
+export const sortSwitches = (list: HomeAssistantSwitch[]) => [...list].sort((a, b) => switchRank(a) - switchRank(b));
 
 export function deploymentDisplay(d: Deployment): Display {
   switch (d.observed_state) {

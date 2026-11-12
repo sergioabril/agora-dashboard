@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { artSegments, HOUSE_ART } from "../ascii";
 import { ago, hhmmss } from "../format";
 import type { ActionFailure, TestResult } from "../live";
-import { switchTone, type Display } from "../model";
+import { sortSwitches, switchTone, type Display } from "../model";
 import type { HomeAssistantSettings, HomeAssistantSwitch, HubResult } from "../types";
 import { Field, useSubmission } from "./AddMachine";
 import { Led, Status } from "./Led";
@@ -25,27 +25,58 @@ function Ln({ no, cls = "", children }: { no?: ReactNode; cls?: string; children
   );
 }
 
+// A single-line cell; when its text overflows, useMarquee ping-pongs it to reveal the rest.
+function Mq({ cls, title, children }: { cls: string; title?: string; children: ReactNode }) {
+  return <span className={`mq ${cls}`} title={title}><span className="mq-t">{children}</span></span>;
+}
+
+// Flags overflowing .mq cells (data-mq) with the distance (--mq) and a duration (--mqt) giving ~30px/s.
+function useMarquee(key: unknown) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const fit = () => {
+      for (const box of root.querySelectorAll<HTMLElement>(".mq")) {
+        const over = (box.firstElementChild as HTMLElement).offsetWidth - box.clientWidth;
+        box.toggleAttribute("data-mq", over > 1);
+        box.style.setProperty("--mq", `${-over}px`);
+        box.style.setProperty("--mqt", `${Math.max(4, over / 9)}s`);
+      }
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(root);
+    root.querySelectorAll(".mq-t").forEach((t) => ro.observe(t));
+    return () => ro.disconnect();
+  }, [key]);
+  return ref;
+}
+
 function SwitchLines({ switches }: { switches: Switches }) {
   const r = switches.value;
+  const list = r && r !== "pending" && r.ok ? r.data.switches : null;
+  const grid = useMarquee(list);
   if (r === "pending" || r === null) return <Ln no={<MonoSpin />} cls="cm">loading switches</Ln>;
   if (!r.ok) return <Ln no="!" cls="er">{r.error.status ?? "request failed"} · {r.error.message}</Ln>;
-  const list = r.data.switches;
-  if (!list.length) return <Ln no="#" cls="cm">no switch.* entities in home assistant</Ln>;
+  if (!list?.length) return <Ln no="#" cls="cm">no switch.* entities in home assistant</Ln>;
   return (
     <>
       <Ln no="#" cls="cm">switches · {list.length} · {hhmmss(switches.at)}</Ln>
-      {list.map((s) => (
-        <Ln key={s.entity_id} no={<Led tone={switchTone(s.state)} />}>
-          <span className="sw-row">
-            <span className="sw-n">{s.name}</span>
-            <span className="sw-e">{s.entity_id}</span>
+      <div className="sw-list" ref={grid}>
+        {sortSwitches(list).map((s) => (
+          <div key={s.entity_id} className="sw-row">
+            <span className="sw-l"><Led tone={switchTone(s.state)} /></span>
+            <Mq cls="sw-n" title={s.name}>{s.name}</Mq>
+            <Mq cls="sw-e" title={s.entity_id}>{s.entity_id}</Mq>
+            {s.machines.length > 0 && (
+              <Mq cls="sw-m" title={s.machines.join(", ")}>
+                {s.machines.map((m) => <span key={m} className="chip"><span className="g">◇</span>{m}</span>)}
+              </Mq>
+            )}
             <span className={`sw-s t-${switchTone(s.state)}`}>{s.state}</span>
-            <span className="sw-m chips">
-              {s.machines.map((m) => <span key={m} className="chip"><span className="g">◇</span>{m}</span>)}
-            </span>
-          </span>
-        </Ln>
-      ))}
+          </div>
+        ))}
+      </div>
     </>
   );
 }
