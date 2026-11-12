@@ -65,7 +65,8 @@ function segClass(ch: string): string {
   if (ch === "┃") return "g";
   if (ch === "═") return "s";
   if (ch === "▪" || ch === "━") return "p";
-  if (/[A-Za-z0-9]/.test(ch)) return "x";
+  if (ch === "▆") return "c";
+  if (/[A-Za-z0-9~$]/.test(ch)) return "x";
   return "o";
 }
 
@@ -152,6 +153,23 @@ export const HOME_FIG = "█ █ █▀█ █▀▄▀█ █▀▀\n█▀█ 
 export const SETTINGS_FIG = "█▀▀ █▀▀ ▀█▀ ▀█▀ █ █▄ █ █▀▀ █▀▀\n▄▄█ ██▄  █   █  █ █ ▀█ █▄█ ▄▄█";
 export const HOUSE_ART = ["    ┌───┐", " ┌──┘ ◉ └──┐", " │ ╭──┴──╮ │", " │ ○ ┌─┐ ● │", " └───┴─┴───┘"];
 export const COG = "\u2699\uFE0E";
+
+// Rail icons, in the DGX Spark art's style: the phosphor terminal at ~$ and a stack of Spark chassis.
+export const HOME_ICON = [
+  "╭────────╮",
+  "│ ~$ ▆   │",
+  "│        │",
+  "╰───┬┬───╯",
+  "  ──┴┴──  ",
+];
+// Not in the rail yet: wired up when the machines page lands.
+export const MACHINES_ICON = [
+  "   ╭─────╮",
+  "  ╭┴────╮│",
+  " ╭┴────╮├╯",
+  " │▓▒░▒▓├╯ ",
+  " ╰───●─╯  ",
+];
 
 export const SP_ACT = "▙▛▜▟";
 export const SP_MONO = Array.from("⣾⣽⣻⢿⡿⣟⣯⣷");

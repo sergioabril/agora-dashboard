@@ -27,42 +27,71 @@ const machines = {
   "rtx-1": { name: "RTX 1", host: "10.0.0.61", device: "rtx6000", reachable: false, error: "timeout: ssh connect to 10.0.0.61:22 timed out after 10s", shutdown_requested: false,
     operation: op("on", "failed", 2 * H, 180e3, "machine did not become reachable before timeout", "ha: switch.rtx_1 off -> on\nssh: waiting for 10.0.0.61:22 ...") },
 };
+const SHUTDOWN = "sudo -S -p '' poweroff";
+const DEFAULTS = { port: 22, key_path: null, shutdown_command: SHUTDOWN, device: "dgx-spark" };
+for (const [id, m] of Object.entries(machines)) Object.assign(m, { user: "agora", port: 22, key_path: null, plug_entity_id: `switch.${id.replace(/-/g, "_")}`, shutdown_command: SHUTDOWN, password: "agora" });
+const seed = (operation, lines) => lines.map(([source, text], i) =>
+  ({ type: "line", source, text, at: new Date(Date.parse(operation.started_at) + i * 1500).toISOString() }));
+const deployment = (name, machineIds, endpoint, ready, operation, log, start = `/home/agora/${name.toLowerCase()}/start.sh`) => ({
+  name, machines: machineIds, head: machineIds[0], start_command: start, stop_command: `/home/agora/${name.toLowerCase()}/stop.sh`,
+  endpoint, ready, operation, log: operation ? seed(operation, log) : [], followers: new Set(),
+});
+const proStop = op("stop", "succeeded", 3 * H, 14e3);
+const flashStart = op("start", "succeeded", 4.5 * H, 412e3);
+const visionStart = op("start", "failed", 2 * H, 180e3, "unavailable machines: rtx-1");
 const deployments = {
-  pro: { name: "Pro", endpoint: "http://spark-1.local:8000/", machines: ["spark-1", "spark-2", "spark-3", "spark-4"], head: "spark-1",
-    state: "stopped", ready: false, scripted: true,
-    operation: op("stop", "succeeded", 3 * H, 14e3, null, "$ bash stop.sh\n[stop] sending SIGTERM to ray head\n[stop] workers drained (3/3)\n[stop] done") },
-  flash: { name: "Flash", endpoint: "http://spark-3.local:8001/", machines: ["spark-3", "spark-4"], head: "spark-3",
-    state: "running", ready: true, scripted: true,
-    operation: op("start", "succeeded", 4.5 * H, 412e3, null, "$ bash start.sh\n[start] launching serve on spark-3 (tp=2)\n[start] loading weights 100%\n[start] listening on :8001") },
-  vision: { name: "Vision", endpoint: "http://10.0.0.61:8000/", machines: ["rtx-1"], head: "rtx-1",
-    state: "unknown", ready: false, scripted: false,
-    operation: op("start", "failed", 2 * H, 180e3, "machine rtx-1 did not become reachable before timeout", "") },
+  pro: deployment("Pro", ["spark-1", "spark-2", "spark-3", "spark-4"], "http://spark-1.local:8000/v1/models", false, proStop, [
+    ["hub", "running /home/agora/pro/stop.sh on spark-1"], ["stdout", "[stop] sending SIGTERM to ray head"], ["stdout", "[stop] workers drained (3/3)"], ["hub", "exited 0"]]),
+  flash: deployment("Flash", ["spark-3", "spark-4"], "http://spark-3.local:8001/v1/models", true, flashStart, [
+    ["hub", "running /home/agora/flash/start.sh on spark-3"], ["stdout", "[start] launching serve on spark-3 (tp=2)"], ["stdout", "[start] loading weights 100%"],
+    ["hub", "exited 0"], ["hub", "waiting for http://spark-3.local:8001/v1/models"], ["hub", "ready"]]),
+  vision: deployment("Vision", ["rtx-1"], "http://10.0.0.61:8000/v1/models", false, visionStart, [["hub", "waking rtx-1"]]),
+  tiny: deployment("Tiny", ["spark-2"], "http://spark-2.local:8002/v1/models", false, null, [], "/home/agora/tiny/fail.sh"),
 };
 let active = null;
 
-const isActiveDeployment = (d) => ["starting", "running", "stopping"].includes(d.state) || d.ready;
+const inProgress = (d) => d.operation?.status === "in_progress";
 
 function deploymentObservation(id) {
-  const d = deployments[id];
-  const headUp = machines[d.head].reachable;
-  const errors = [];
-  if (!d.ready) errors.push(`http: GET ${d.endpoint}v1/models failed: ${headUp ? "503 Service Unavailable" : "connection refused"}`);
-  let scriptState = null;
-  if (d.scripted) {
-    scriptState = headUp ? d.state : "unknown";
-    if (!headUp) errors.unshift(`connect: ssh ${d.head} unreachable`);
+  const { followers, log, ready, operation, ...config } = deployments[id];
+  const observed = inProgress(deployments[id]) ? (operation.action === "start" ? "starting" : "stopping") : ready ? "running" : "stopped";
+  const error = ready ? null : observed === "starting" ? "http: endpoint returned HTTP 503" : "http: All connection attempts failed";
+  return { ...clone(config), observed_state: observed, ready, error, checked_at: iso(), operation: clone(operation) };
+}
+
+const send = (res, event) => res.write(JSON.stringify(event) + "\n");
+
+// Appends to the log and fans out to every open stream; `end` closes them.
+function emit(d, event) {
+  if (event.type === "line") d.log = [...d.log, event].slice(-2000);
+  for (const res of d.followers) {
+    send(res, event);
+    if (event.type === "end") res.end();
   }
-  return {
-    name: d.name, endpoint: d.endpoint, machines: [...d.machines], head: d.head,
-    observed_state: scriptState ?? (d.ready ? "running" : "unknown"), script_state: scriptState, ready: d.ready,
-    discrepancy: scriptState !== null && (scriptState === "running") !== d.ready,
-    errors, checked_at: iso(), operation: clone(d.operation),
-  };
+  if (event.type === "end") d.followers.clear();
+}
+
+// Replays the current or last operation, then follows it live until it ends.
+function follow(d, res, status) {
+  res.writeHead(status, { "content-type": "application/x-ndjson" });
+  send(res, { type: "operation", operation: clone(d.operation) });
+  d.log.forEach((l) => send(res, l));
+  if (!inProgress(d)) {
+    send(res, { type: "end", operation: clone(d.operation) });
+    return res.end();
+  }
+  d.followers.add(res);
+  res.on("close", () => d.followers.delete(res));
 }
 
 function finish(operation, error, output) {
   Object.assign(operation, { status: error ? "failed" : "succeeded", error, finished_at: iso(), output });
   active = null;
+}
+
+function finishDeployment(d, error) {
+  finish(d.operation, error, "");
+  emit(d, { type: "end", operation: clone(d.operation) });
 }
 
 const work = {
@@ -81,50 +110,73 @@ const work = {
     Object.assign(m, { reachable: false, error: "connect: [Errno 64] Host is down", shutdown_requested: true });
     finish(operation, null, `$ sudo -S -p '' poweroff\nConnection to ${m.host} closed by remote host.`);
   },
-  async start(id, operation) {
+  async start(id) {
     const d = deployments[id];
-    const down = d.machines.filter((m) => !machines[m].reachable);
-    if (down.length) {
-      await wait(5000);
-      for (const m of down) {
-        if (machines[m].device === "rtx6000") {
-          d.state = "unknown";
-          return finish(operation, `machine ${m} did not become reachable before timeout`, "");
-        }
-        Object.assign(machines[m], { reachable: true, error: null, shutdown_requested: false });
-      }
+    const say = (source, text) => emit(d, { type: "line", source, text, at: iso() });
+    for (const m of d.machines.filter((m) => !machines[m].reachable)) {
+      say("hub", `waking ${m}`);
+      await wait(2500);
+      if (machines[m].device === "rtx6000") return finishDeployment(d, `unavailable machines: ${m}`);
+      Object.assign(machines[m], { reachable: true, error: null, shutdown_requested: false });
+      say("hub", `${m} is up`);
     }
-    d.state = "starting";
-    await wait(8000);
-    Object.assign(d, { state: "running", ready: true });
-    finish(operation, null, `$ bash start.sh\n[start] launching serve on ${d.head} (tp=${d.machines.length})\n[start] loading weights 100%\n[start] readiness ok: ${d.endpoint}v1/models -> 200`);
-  },
-  async stop(id, operation) {
-    const d = deployments[id];
-    d.state = "stopping";
+    say("hub", `running ${d.start_command} on ${d.head}`);
+    await wait(1200);
+    if (d.start_command.includes("fail")) {
+      for (const text of ["[start] launching serve on " + d.head, "[start] loading weights 1/4"]) {
+        say("stdout", text);
+        await wait(1200);
+      }
+      say("stderr", "[start] error: CUDA out of memory");
+      await wait(600);
+      say("hub", "exited 3");
+      return finishDeployment(d, "start command exited 3");
+    }
+    const out = [`[start] launching serve on ${d.head} (tp=${d.machines.length})`, "[start] loading weights 1/4", "[start] loading weights 2/4",
+      "[start] loading weights 3/4", "[start] loading weights 4/4", "[start] listening on :8000"];
+    for (const [i, text] of out.entries()) {
+      say("stdout", text);
+      if (i === 1) say("stderr", "[warn] NCCL_P2P disabled, falling back to sockets");
+      await wait(1500);
+    }
+    say("hub", "exited 0");
+    say("hub", `waiting for ${d.endpoint}`);
     await wait(3500);
-    Object.assign(d, { state: "stopped", ready: false });
-    finish(operation, null, `$ bash stop.sh\n[stop] sending SIGTERM to ${d.head}\n[stop] done`);
+    d.ready = true;
+    say("hub", "ready");
+    finishDeployment(d, null);
+  },
+  async stop(id) {
+    const d = deployments[id];
+    const say = (source, text) => emit(d, { type: "line", source, text, at: iso() });
+    say("hub", `running ${d.stop_command} on ${d.head}`);
+    for (const text of [`[stop] sending SIGTERM to ${d.head}`, "[stop] done"]) {
+      await wait(1500);
+      say("stdout", text);
+    }
+    say("hub", "exited 0");
+    d.ready = false;
+    finishDeployment(d, null);
   },
 };
 
 const conflict = (code, message, blocking) => [409, { detail: { code, message, blocking } }];
 
 function machineConflict(id, action) {
+  const using = Object.entries(deployments).filter(([, d]) => d.machines.includes(id));
+  const running = (test) => {
+    const [depId, d] = using.find(([, d]) => test(d)) ?? [];
+    return d && conflict("deployment_active", `machine is running deployment ${d.name}; stop it first`, { deployment: depId });
+  };
+  if (action === "off" && running(inProgress)) return running(inProgress);
   if (active) return conflict("busy", "another operation is active", clone(active));
   if (action === "on" && machines[id].reachable) return conflict("machine_on", "machine is already on", { machine: id });
-  if (action === "off") {
-    for (const [depId, d] of Object.entries(deployments)) {
-      if (!d.machines.includes(id)) continue;
-      if (isActiveDeployment(d)) return conflict("deployment_active", "deployment must be stopped first", { deployment: depId });
-      if (d.state === "unknown") return conflict("deployment_state_unknown", "deployment state is unknown", { deployment: depId });
-    }
-  }
+  if (action === "off") return running((d) => d.ready);
 }
 
 function deploymentConflict(id, action) {
   if (active) return conflict("busy", "another operation is active", clone(active));
-  if (action === "start" && isActiveDeployment(deployments[id])) return conflict("deployment_active", "deployment is already active", { deployment: id });
+  if (action === "start" && deployments[id].ready) return conflict("deployment_active", "deployment is already running", { deployment: id });
 }
 
 function validate(raw, allowed) {
@@ -148,18 +200,20 @@ const FIELDS = ["name", "host", "user", "port", "password", "key_path", "sudo_pa
 const DEVICES = ["dgx-spark", "rtx6000", "mac-studio"];
 
 // test mirrors POST /admin/machines/test: password "wrong" is refused and a host starting with "down" is unreachable.
-function machineRequest(raw, test) {
+// update (`id`) merges onto the stored machine, null resetting a field to its default.
+function machineRequest(raw, test, id) {
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {}
-  const b = {};
-  for (const [k, v] of Object.entries(parsed && typeof parsed === "object" ? parsed : {})) if (v != null) b[k] = v;
+  const b = id ? Object.fromEntries(FIELDS.filter((k) => machines[id][k] != null).map((k) => [k, machines[id][k]])) : {};
+  for (const [k, v] of Object.entries(parsed && typeof parsed === "object" ? parsed : {})) v == null ? delete b[k] : (b[k] = v);
   const invalid = (at, msg) => [422, { detail: `invalid configuration at ${at}: ${msg}` }];
   const required = "Field required";
   if (!("name" in b)) return invalid("name", required);
   if (!String(b.name).trim()) return invalid("name", "String should have at least 1 character");
   if (!("host" in b)) return invalid("host", required);
+  if (!/^[A-Za-z0-9.-]+$/.test(String(b.host))) return invalid("host", "String should match pattern '^[A-Za-z0-9.-]+$'");
   if (!("user" in b)) return invalid("user", required);
   if ("port" in b && !(Number.isInteger(b.port) || /^\s*[+-]?\d+\s*$/.test(String(b.port)))) {
     return invalid("port", "Input should be a valid integer, unable to parse string as an integer");
@@ -174,17 +228,46 @@ function machineRequest(raw, test) {
     if (b.password === "wrong") return [200, { reachable: true, error: `auth: Permission denied for user ${b.user} on host ${b.host}` }];
     return [200, { reachable: true, error: null }];
   }
-  let id;
-  do id = crypto.randomBytes(4).toString("hex");
-  while (machines[id]);
-  const m = {
-    id, name: String(b.name).trim(), host: b.host, user: b.user, port: b.port == null ? 22 : Number(b.port),
-    key_path: b.key_path ?? null, shutdown_command: b.shutdown_command ?? "sudo -S -p '' poweroff",
-    plug_entity_id: b.plug_entity_id, device: b.device ?? "dgx-spark",
-  };
-  machines[id] = { name: m.name, host: m.host, device: m.device, reachable: true, error: null,
-    shutdown_requested: false, operation: null };
-  return [201, m];
+  const created = !id;
+  if (created) do id = crypto.randomBytes(4).toString("hex");
+  while (created && machines[id]);
+  const c = { ...DEFAULTS, ...b, name: String(b.name).trim(), port: Number(b.port ?? 22) };
+  machines[id] ??= { reachable: true, error: null, shutdown_requested: false, operation: null };
+  for (const k of FIELDS) machines[id][k] = c[k] ?? null;
+  const { password, sudo_password, ...view } = c;
+  return [created ? 201 : 200, { id, ...view }];
+}
+
+const DEPLOYMENT_FIELDS = ["name", "machines", "head", "start_command", "stop_command", "endpoint"];
+
+// Mirrors POST /admin/deployments/add and /{id}/update: merge (null drops a key), validate like the hub, save.
+function saveDeployment(id, raw) {
+  let body;
+  try {
+    body = JSON.parse(raw || "{}");
+  } catch {}
+  if (!body || typeof body !== "object" || Array.isArray(body)) return [422, { detail: "invalid configuration at : Input should be a valid dictionary" }];
+  const current = id ? deployments[id] : {};
+  const d = Object.fromEntries(DEPLOYMENT_FIELDS.filter((k) => current[k] !== undefined).map((k) => [k, clone(current[k])]));
+  for (const [k, v] of Object.entries(body)) v === null ? delete d[k] : (d[k] = v);
+  const newId = id ?? crypto.randomBytes(4).toString("hex");
+  const invalid = (at, msg) => [422, { detail: `invalid configuration at ${at}: ${msg}` }];
+  const missing = DEPLOYMENT_FIELDS.find((k) => !(k in d));
+  if (missing) return invalid(missing, "Field required");
+  if (!String(d.name).trim()) return invalid("name", "String should have at least 1 character");
+  if (!Array.isArray(d.machines)) return invalid("machines", "Input should be a valid list");
+  for (const k of ["start_command", "stop_command"]) {
+    if (!String(d[k]).trim().startsWith("/")) return invalid(k, "Value error, must start with an absolute path");
+  }
+  if (!/^https?:\/\/[^/\s]+/.test(String(d.endpoint))) return invalid("endpoint", "Input should be a valid URL, relative URL without a base");
+  const extra = Object.keys(d).find((k) => !DEPLOYMENT_FIELDS.includes(k));
+  if (extra) return invalid(extra, "Extra inputs are not permitted");
+  const unknown = d.machines.filter((m) => !machines[m]).sort()[0];
+  if (unknown) return [422, { detail: `unknown machine in ${newId}: ${unknown}` }];
+  if (!d.machines.includes(d.head)) return [422, { detail: `head is not in machines for ${newId}` }];
+  if (id) Object.assign(deployments[id], d);
+  else deployments[newId] = { ...d, ready: false, operation: null, log: [], followers: new Set() };
+  return [id ? 200 : 201, { id: newId, ...clone(d) }];
 }
 
 const HA_DEFAULTS = { host: "homeassistant.local", port: 8123, token: "", power_cycle_delay_seconds: 5 };
@@ -244,7 +327,8 @@ async function route(method, path, raw) {
     await latency();
     const out = {};
     for (const [id, m] of Object.entries(machines)) {
-      out[id] = { name: m.name, host: m.host, device: m.device, reachable: m.reachable, error: m.error,
+      out[id] = { name: m.name, host: m.host, user: m.user, port: m.port, key_path: m.key_path, plug_entity_id: m.plug_entity_id,
+        shutdown_command: m.shutdown_command, device: m.device, reachable: m.reachable, error: m.error,
         checked_at: iso(), shutdown_requested: m.shutdown_requested, operation: clone(m.operation) };
     }
     return [200, { machines: out, active: clone(active) }];
@@ -259,6 +343,33 @@ async function route(method, path, raw) {
     await latency();
     return machineRequest(raw, path.endsWith("/test"));
   }
+  const mUpdate = method === "POST" && path.match(/^\/admin\/machines\/([^/]+)\/update$/);
+  if (mUpdate) {
+    await latency();
+    const id = decodeURIComponent(mUpdate[1]);
+    if (!Object.hasOwn(machines, id)) return [404, { detail: "Machine not found" }];
+    if (active?.machines.includes(id)) return conflict("machine_busy", "machine has an active operation", clone(active));
+    return machineRequest(raw, false, id);
+  }
+  if (method === "POST" && path === "/admin/deployments/add") {
+    await latency();
+    return saveDeployment(null, raw);
+  }
+  const update = method === "POST" && path.match(/^\/admin\/deployments\/([^/]+)\/update$/);
+  if (update) {
+    await latency();
+    const id = decodeURIComponent(update[1]);
+    if (!Object.hasOwn(deployments, id)) return [404, { detail: "Deployment not found" }];
+    if (active?.target === id || inProgress(deployments[id])) return conflict("deployment_busy", "deployment has an active operation", clone(active ?? {}));
+    return saveDeployment(id, raw);
+  }
+  const output = method === "GET" && path.match(/^\/admin\/deployments\/([^/]+)\/output$/);
+  if (output) {
+    await latency();
+    const d = deployments[decodeURIComponent(output[1])];
+    if (!d) return [404, { detail: "Deployment not found" }];
+    return d.operation ? [200, null, (res) => follow(d, res, 200)] : [404, { detail: "No operation" }];
+  }
   const match = method === "POST" && path.match(/^\/admin\/(machines|deployments)\/([^/]+)$/);
   if (!match) return [404, { detail: "Not Found" }];
   await latency();
@@ -272,8 +383,15 @@ async function route(method, path, raw) {
   if (blocked) return blocked;
   active = { action, target: id, machines: kind === "machines" ? [id] : [...store[id].machines] };
   const operation = store[id].operation = { action, status: "in_progress", started_at: iso(), finished_at: null, error: null, output: "" };
-  work[action](id, operation);
-  return [202, clone(operation)];
+  if (kind === "machines") {
+    work[action](id, operation);
+    return [202, clone(operation)];
+  }
+  store[id].log = [];
+  return [202, null, (res) => {
+    follow(store[id], res, 202);
+    work[action](id);
+  }];
 }
 
 http.createServer((req, res) => {
@@ -281,10 +399,11 @@ http.createServer((req, res) => {
   req.on("data", (chunk) => (raw += chunk));
   req.on("end", async () => {
     const path = new URL(req.url, "http://fake").pathname;
-    const [status, body] = OPEN || req.headers.authorization === `Bearer ${TOKEN}`
+    const [status, body, stream] = OPEN || req.headers.authorization === `Bearer ${TOKEN}`
       ? await route(req.method, path, raw)
       : [401, { detail: "Unauthorized" }];
     console.log(`${req.method} ${path} -> ${status}`);
+    if (stream) return stream(res);
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   });

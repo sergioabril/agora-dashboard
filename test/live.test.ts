@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { actionResult, parseAction, parseHomeAssistant, parseMachine, pendingActive, toastFor } from "../app/live";
-import type { Operation } from "../app/types";
+import {
+  actionResult, needsFollow, parseAction, parseDeployment, parseHomeAssistant, parseMachine, pendingActive, readEvents, toastFor, toggleMachine,
+} from "../app/live";
+import type { Deployment, Operation, StreamEvent } from "../app/types";
 
 const op: Operation = { action: "on", status: "in_progress", started_at: "2026-11-09T08:00:00+00:00", finished_at: null, error: null, output: "" };
 
@@ -26,6 +28,31 @@ describe("add machine form", () => {
     expect(parseMachine({ intent: "add", id: "x", name: " Spark 5 ", host: "spark-5.local", user: "agora", port: "2222",
       password: " p w ", key_path: "", sudo_password: "", shutdown_command: "  " })).toEqual({
       name: "Spark 5", host: "spark-5.local", user: "agora", port: 2222, password: " p w " });
+  });
+
+  it("on update omits blank secrets and sends a blank optional as null", () => {
+    expect(parseMachine({ name: "S", port: "", key_path: " ", password: "", sudo_password: "s" }, true)).toEqual({
+      name: "S", port: null, key_path: null, sudo_password: "s" });
+  });
+});
+
+describe("deployment form", () => {
+  it("toggles machines in row order and keeps the head rules", () => {
+    const order = ["a", "b", "c"];
+    expect(toggleMachine(order, [], "", "b")).toEqual({ checked: ["b"], head: "b" });
+    expect(toggleMachine(order, ["b"], "b", "a")).toEqual({ checked: ["a", "b"], head: "b" });
+    expect(toggleMachine(order, ["a", "b"], "b", "b")).toEqual({ checked: ["a"], head: "" });
+    expect(toggleMachine(order, ["a", "c"], "", "a")).toEqual({ checked: ["c"], head: "" });
+    expect(toggleMachine(order, ["a", "c"], "c", "b")).toEqual({ checked: ["a", "b", "c"], head: "c" });
+  });
+
+  it("sends every checked machine, trims text, and blanks are omitted on add but null on update", () => {
+    const form = new FormData();
+    for (const [k, v] of [["intent", "x"], ["name", " Mini "], ["machines", "a"], ["machines", "b"], ["head", "b"], ["start_command", " /s.sh "],
+      ["stop_command", ""], ["endpoint", "http://a:1/v1"]]) form.append(k, v);
+    const add = { machines: ["a", "b"], name: "Mini", head: "b", start_command: "/s.sh", endpoint: "http://a:1/v1" };
+    expect(parseDeployment(form)).toEqual(add);
+    expect(parseDeployment(form, true)).toEqual({ ...add, stop_command: null });
   });
 });
 
@@ -68,5 +95,33 @@ describe("home assistant form", () => {
   it("trims fields, numbers the port and always sends the token", () => {
     expect(parseHomeAssistant({ intent: "save", host: " ha.lan ", port: "8124", token: " t " })).toEqual({ host: "ha.lan", port: 8124, token: "t" });
     expect(parseHomeAssistant({ host: "", port: "", token: "" })).toEqual({ token: "" });
+  });
+});
+
+describe("deployment log stream", () => {
+  const body = (...chunks: string[]) => new ReadableStream<BufferSource>({
+    start(c) {
+      chunks.forEach((x) => c.enqueue(new TextEncoder().encode(x)));
+      c.close();
+    },
+  });
+  it("joins a line split across chunks and reports whether end arrived", async () => {
+    const seen: StreamEvent[] = [];
+    const line = { type: "line", source: "stdout", text: "[start] loading", at: "t" };
+    expect(await readEvents(body(`{"type":"operation","operation":{}}\n{"type":"li`, `ne","source":"stdout","text":"[start] loading","at":"t"}\n`), (e) => seen.push(e))).toBe(false);
+    expect(seen).toEqual([{ type: "operation", operation: {} }, line]);
+    expect(await readEvents(body(`{"type":"end","operation":{}}`), () => {})).toBe(true);
+  });
+  it("follows a new operation or a dropped live stream, never while posting", () => {
+    const d = (status: Operation["status"]) => ({ operation: { ...op, action: "start", status } }) as Deployment;
+    const log = (startedAt: string, open: boolean) => ({ startedAt, lines: [], open, own: false, end: null });
+    expect(needsFollow(d("in_progress"), undefined, false)).toBe(true);
+    expect(needsFollow(d("succeeded"), log("2026-11-09T07:00:00+00:00", false), false)).toBe(true);
+    expect(needsFollow(d("succeeded"), log(op.started_at, false), false)).toBe(false);
+    expect(needsFollow(d("in_progress"), log(op.started_at, false), false)).toBe(true);
+    expect(needsFollow(d("in_progress"), log(op.started_at, true), false)).toBe(false);
+    expect(needsFollow(d("in_progress"), undefined, true)).toBe(false);
+    expect(needsFollow(d("succeeded"), log("2026-11-09T09:00:00+00:00", true), false)).toBe(false);
+    expect(needsFollow({ operation: null } as Deployment, undefined, false)).toBe(false);
   });
 });

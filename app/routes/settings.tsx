@@ -3,13 +3,12 @@ import { useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router"
 import type { Route } from "./+types/settings";
 import { SETTINGS_FIG } from "../ascii";
 import { Banner } from "../components/Banner";
-import { PowerOn } from "../components/Boot";
 import { Header } from "../components/Header";
 import { HomeAssistantCard, type Settled } from "../components/HomeAssistant";
 import { MonoSpin } from "../components/Spinner";
 import { Panel } from "../components/Panel";
 import { Ps1 } from "../components/Ps1";
-import { Rail } from "../components/Rail";
+import { useHub } from "../components/Rail";
 import { SkeletonGrid } from "../components/Skeleton";
 import { ago } from "../format";
 import { homeAssistant, homeAssistantSwitches, saveHomeAssistant, testHomeAssistant } from "../hub.server";
@@ -76,34 +75,31 @@ export default function Settings({ loaderData: ld }: Route.ComponentProps) {
   const display = last && homeAssistantDisplay(last, error ? { ok: false, error } : check.value);
   const refreshing = revalidator.state !== "idle" || check.value === "pending";
   const refresh = () => revalidator.state === "idle" && void revalidator.revalidate();
+  useHub(error ? "offline" : "ok", error?.message);
 
   return (
-    <>
-      <Rail page="settings" hub={error ? "offline" : "ok"} title={error?.message} />
-      <PowerOn />
-      <main id="main">
-        <div className={`wrap${error && last ? " stale" : ""}`}>
-          <Header command="cd ~/settings && hub integrations --status" fig={SETTINGS_FIG} label="settings" refreshing={refreshing} onRefresh={refresh}>
-            <b>{last ? 1 : 0}</b> integration<i>·</i>home assistant{" "}
-            {display ? <span className={`stx t-${display.led}`}>{display.label}</span> : "—"}<i>·</i>
-            {refreshing ? <span className="rf">checking <MonoSpin /></span>
-              : display?.label === "off" ? "not configured" : <>checked {ago(check.at, now)}</>}
-            {error && <><i>·</i><span className="bad">{error.kind === "unauthorized" ? "token rejected" : "hub offline"}</span></>}
-          </Header>
-          <div className="banners" aria-live="polite">
-            {error?.kind === "unauthorized" && <Banner kind="rejected" />}
-            {error && error.kind !== "unauthorized" && <Banner kind="offline" message={error.message} lastOkAt={lastOkAt} />}
-          </div>
-          <Panel id="s-i" cmd="integrations" noun="integration" className="grid-l" displays={display ? [display] : null}>
-            {last && display
-              ? <HomeAssistantCard settings={last} display={display} disabled={error !== null} checkedAt={check.at} switches={switches} now={now} />
-              : <SkeletonGrid kind="machine" count={1} />}
-          </Panel>
-          <footer className="foot">
-            <span aria-hidden="true"><Ps1 /></span> <span className="muted">exit 0 · phosphor/tty0</span>
-          </footer>
+    <main id="main">
+      <div className={`wrap${error && last ? " stale" : ""}`}>
+        <Header command="cd ~/settings && hub integrations --status" fig={SETTINGS_FIG} label="settings" refreshing={refreshing} onRefresh={refresh}>
+          <b>{last ? 1 : 0}</b> integration<i>·</i>home assistant{" "}
+          {display ? <span className={`stx t-${display.led}`}>{display.label}</span> : "—"}<i>·</i>
+          {refreshing ? <span className="rf">checking <MonoSpin /></span>
+            : display?.label === "off" ? "not configured" : <>checked {ago(check.at, now)}</>}
+          {error && <><i>·</i><span className="bad">{error.kind === "unauthorized" ? "token rejected" : "hub offline"}</span></>}
+        </Header>
+        <div className="banners" aria-live="polite">
+          {error?.kind === "unauthorized" && <Banner kind="rejected" />}
+          {error && error.kind !== "unauthorized" && <Banner kind="offline" message={error.message} lastOkAt={lastOkAt} />}
         </div>
-      </main>
-    </>
+        <Panel id="s-i" cmd="integrations" noun="integration" className="grid-l" displays={display ? [display] : null}>
+          {last && display
+            ? <HomeAssistantCard settings={last} display={display} disabled={error !== null} checkedAt={check.at} switches={switches} now={now} />
+            : <SkeletonGrid kind="machine" count={1} />}
+        </Panel>
+        <footer className="foot">
+          <span aria-hidden="true"><Ps1 /></span> <span className="muted">exit 0 · phosphor/tty0</span>
+        </footer>
+      </div>
+    </main>
   );
 }

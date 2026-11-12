@@ -31,13 +31,21 @@ describe("hub client", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("posts the action body", async () => {
-    const op = { action: "start", status: "in_progress", started_at: "x", finished_at: null, error: null, output: "" };
-    const fetch = stub(202, op);
-    expect(await hub.deploymentAction("pro", "start")).toEqual({ ok: true, data: op });
+  it("streams a start and classifies a 409 JSON answer", async () => {
+    const body = '{"type":"operation"}\n';
+    const fetch = vi.fn(async () => new Response(body, { status: 202, headers: { "content-type": "application/x-ndjson" } }));
+    vi.stubGlobal("fetch", fetch);
+    const r = await hub.deploymentStream("pro", "start", new AbortController().signal);
+    if (!r.ok) throw new Error("expected a stream");
+    expect([r.status, await new Response(r.body).text()]).toEqual([202, body]);
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://hub.test:3334/admin/deployments/pro");
-    expect(init).toMatchObject({ method: "POST", body: '{"action":"start"}' });
+    expect(init).toMatchObject({ method: "POST", body: '{"action":"start"}', headers: { Accept: "application/x-ndjson" } });
+
+    stub(409, { detail: { code: "busy", message: "another operation is active", blocking: { action: "start", target: "flash" } } });
+    expect(await hub.deploymentStream("pro", "start", new AbortController().signal)).toEqual({
+      ok: false, error: { kind: "conflict", status: 409, code: "busy", message: "another operation is active", blocking: { action: "start", target: "flash" } },
+    });
   });
 
   it("classifies hub errors", async () => {
@@ -66,6 +74,24 @@ describe("hub client", () => {
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://hub.test:3334/admin/machines/add");
     expect(init).toMatchObject({ method: "POST", body: '{"name":"Spark 5","port":22}' });
+  });
+
+  it("posts deployment add and update to their paths", async () => {
+    const fetch = stub(200, { id: "pro" });
+    await hub.addDeployment({ name: "Mini", machines: ["spark-2"] });
+    await hub.updateDeployment("pro", { name: null, machines: [] });
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["http://hub.test:3334/admin/deployments/add", "POST", '{"name":"Mini","machines":["spark-2"]}'],
+      ["http://hub.test:3334/admin/deployments/pro/update", "POST", '{"name":null,"machines":[]}'],
+    ]);
+  });
+
+  it("posts machine updates to their path", async () => {
+    const fetch = stub(200, { id: "spark-1" });
+    await hub.updateMachine("spark-1", { name: "S", port: null });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method, init.body]).toEqual(["http://hub.test:3334/admin/machines/spark-1/update", "POST", '{"name":"S","port":null}']);
   });
 
   it("maps network failures to offline and aborts to timeout", async () => {

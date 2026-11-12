@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
-import { dur, stamp } from "../format";
-import type { Operation } from "../types";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { dur, hhmmss, stamp } from "../format";
+import type { LogLine, Operation } from "../types";
+import { MonoSpin } from "./Spinner";
 
 export type Observation = { checkedAt: string; rows: [string, string][]; errors: string[]; okNote?: string };
 
@@ -37,19 +38,54 @@ export function LogToggle({ open, id, count, bang, onClick }: { open: boolean; i
   );
 }
 
-export function LogDrawer({ open, id, op, obs }: { open: boolean; id: string; op: Operation | null; obs: Observation }) {
+const TAG = { hub: "hub│", stdout: "out│", stderr: "err│" };
+
+function Lx({ line: l }: { line: LogLine }) {
+  return (
+    <div className={`ln lx src-${l.source}`}>
+      <span className="no">{TAG[l.source]}</span>
+      <span>{l.source === "stdout" ? hl(l.text) : l.text}</span>
+      <span className="ts">{hhmmss(l.at)}</span>
+    </div>
+  );
+}
+
+type DrawerProps = { open: boolean; id: string; op: Operation | null; lines: LogLine[] | null; live: boolean; obs: Observation };
+
+export function LogDrawer({ open, id, op, lines, live, obs }: DrawerProps) {
+  // Keeps the newest line in view unless the user scrolled up.
+  const term = useRef<HTMLDivElement>(null);
+  const tail = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const below = () => (tail.current && term.current ? tail.current.getBoundingClientRect().top - term.current.getBoundingClientRect().bottom + 10 : 0);
+  useLayoutEffect(() => {
+    if (pinned.current && term.current) term.current.scrollTop += below();
+  }, [lines, live, open]);
   return (
     <div className="drawer" id={id} inert={!open}>
       <div className="drawer-in">
-        <div className="term">
+        <div className="term" ref={term} onScroll={() => (pinned.current = below() < 24)}>
           {op ? (
             <>
               <Ln no="#" cls="cm">op <span className="v">{op.action}</span> · {op.status}</Ln>
               <Ln cls="cm">started  {stamp(op.started_at)}</Ln>
               {op.finished_at && <Ln cls="cm">finished {stamp(op.finished_at)} · took {dur(op.started_at, op.finished_at)}</Ln>}
               <div className="gap" />
-              {outLines(op).map((l, i) => <Ln key={i} no={String(i + 1)}>{hl(l)}</Ln>)}
-              {!op.output && <Ln cls="dim">{op.status === "in_progress" ? "output arrives when the operation finishes" : "(no output)"}</Ln>}
+              {lines ? (
+                <>
+                  {lines.map((l, i) => <Lx key={i} line={l} />)}
+                  {live && (lines.length
+                    ? <div className="ln lx live"><span className="no">{"   │"}</span><span><MonoSpin /></span><span className="ts">live</span></div>
+                    : <Ln cls="dim">waiting for output…</Ln>)}
+                  {!live && !lines.length && <Ln cls="dim">(no output)</Ln>}
+                  <div ref={tail} />
+                </>
+              ) : (
+                <>
+                  {outLines(op).map((l, i) => <Ln key={i} no={String(i + 1)}>{hl(l)}</Ln>)}
+                  {!op.output && <Ln cls="dim">{op.status === "in_progress" ? "output arrives when the operation finishes" : "(no output)"}</Ln>}
+                </>
+              )}
               {op.error ? <Ln no="✗" cls="er">{op.error}</Ln> : op.status === "succeeded" && <Ln no="✓" cls="ok2">exit ok</Ln>}
             </>
           ) : (

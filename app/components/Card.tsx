@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { hhmm } from "../format";
-import type { Operation } from "../types";
+import type { LogLine, Operation } from "../types";
 import { Spinner } from "./Spinner";
 import { LogDrawer, LogToggle, logCount, type Observation } from "./LogDrawer";
 
@@ -14,6 +14,10 @@ type Props = {
   busy: Busy;
   index?: number;
   op: Operation | null;
+  lines?: LogLine[] | null;
+  live?: boolean;
+  failed?: boolean;
+  openOn?: number;
   obs: Observation;
   hasError: boolean;
   busyLabel: string;
@@ -21,10 +25,14 @@ type Props = {
   children: ReactNode;
 };
 
-export function CardFrame({ id, title, status, bottom, busy, busyLabel, index, op, obs, hasError, control, children }: Props) {
+export function CardFrame({ id, title, status, bottom, busy, busyLabel, index, op, lines = null, live = false, failed, openOn, obs, hasError, control, children }: Props) {
   const [open, setOpen] = useState(false);
+  // Auto-open on each own start/stop; never closes by itself.
+  useEffect(() => {
+    if (openOn) setOpen(true);
+  }, [openOn]);
   const did = `drw-${id.replace(/[^a-z0-9_-]/gi, "-")}`;
-  const cls = `card${busy === "active" ? " is-act" : busy === "waiting" ? " is-wait" : ""}${open ? " open" : ""}`;
+  const cls = `card${busy === "active" ? " is-act" : busy === "waiting" ? " is-wait" : ""}${failed ? " is-fail" : ""}${open ? " open" : ""}`;
   return (
     <article className={cls} style={{ "--i": index ?? 0 } as React.CSSProperties}>
       <div className="fr fr-top">
@@ -37,7 +45,7 @@ export function CardFrame({ id, title, status, bottom, busy, busyLabel, index, o
       <div className="fr-body">
         <div className="cmain">{children}</div>
         <div className="foot-row">
-          <LogToggle open={open} id={did} count={logCount(op)} bang={hasError} onClick={() => setOpen(!open)} />
+          <LogToggle open={open} id={did} count={lines ? lines.length : logCount(op)} bang={hasError} onClick={() => setOpen(!open)} />
           {busy ? (
             <>
               <span className="hint" />
@@ -49,7 +57,7 @@ export function CardFrame({ id, title, status, bottom, busy, busyLabel, index, o
             control
           )}
         </div>
-        <LogDrawer open={open} id={did} op={op} obs={obs} />
+        <LogDrawer open={open} id={did} op={op} lines={lines} live={live} obs={obs} />
       </div>
       <div className="fr fr-bot">
         <span className="c" aria-hidden="true">╰─</span>

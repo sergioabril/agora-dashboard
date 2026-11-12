@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useFetcher, useFetchers } from "react-router";
 import type { Route } from "./+types/home";
 import { HOME_FIG } from "../ascii";
+import { AddDeployment } from "../components/AddDeployment";
 import { AddMachine } from "../components/AddMachine";
 import { Banner } from "../components/Banner";
 import { useFirstLoad } from "../components/anim";
@@ -15,12 +16,12 @@ import { Ps1 } from "../components/Ps1";
 import { useHub } from "../components/Rail";
 import { SkeletonGrid } from "../components/Skeleton";
 import { Toasts, type ToastData } from "../components/Toast";
-import { addMachine, deploymentAction, deploymentsStatus, machineAction, machinesStatus, testMachine } from "../hub.server";
+import { addDeployment, addMachine, deploymentsStatus, machineAction, machinesStatus, testMachine, updateDeployment, updateMachine } from "../hub.server";
 import {
-  actionResult, addResult, parseAction, parseMachine, pendingActive, testResult, toastFor, toggleAction, usePolling,
-  type ActionRequest, type ActionResult, type AddResult, type Kind, type Pending, type TestResult,
+  actionResult, addResult, deploymentResult, parseAction, parseDeployment, parseMachine, pendingActive, testResult, toastFor, toggleAction,
+  useDeploymentLogs, usePolling, type ActionRequest, type ActionResult, type AddResult, type DeploymentResult, type Pending, type TestResult,
 } from "../live";
-import { deploymentDisplay, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS } from "../model";
+import { deploymentDisplay, deploymentFailed, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS } from "../model";
 import type { DeploymentsStatus, HubError, HubResult, MachinesStatus } from "../types";
 
 export function meta() {
@@ -33,28 +34,30 @@ export function loader() {
   return { now: t0, machines: timed(machinesStatus()), deployments: timed(deploymentsStatus()) };
 }
 
-export async function action({ request }: Route.ActionArgs): Promise<ActionResult | AddResult | TestResult> {
-  const fields = Object.fromEntries(await request.formData());
+export async function action({ request }: Route.ActionArgs): Promise<ActionResult | AddResult | TestResult | DeploymentResult> {
+  const form = await request.formData();
+  const fields = Object.fromEntries(form);
+  if (fields.intent === "add-deployment") return deploymentResult(await addDeployment(parseDeployment(form)));
+  if (fields.intent === "update-deployment") return deploymentResult(await updateDeployment(String(fields.id), parseDeployment(form, true)));
   if (fields.intent === "add") return addResult(await addMachine(parseMachine(fields)));
+  if (fields.intent === "update-machine") return addResult(await updateMachine(String(fields.id), parseMachine(fields, true)));
   if (fields.intent === "test") return testResult(await testMachine(parseMachine(fields)));
-  const parsed = parseAction(fields);
+  const parsed = parseAction({ ...fields, kind: "machine" });
   if (!parsed.ok) return parsed;
-  const { kind, id, action } = parsed.request;
-  const r = kind === "machine" ? await machineAction(id, action as "on" | "off") : await deploymentAction(id, action as "start" | "stop");
-  return actionResult(r);
+  return actionResult(await machineAction(parsed.request.id, parsed.request.action as "on" | "off"));
 }
 
 type OnResult = (req: ActionRequest, r: ActionResult) => void;
 
-function Toggle({ kind, id, onResult, children }: { kind: Kind; id: string; onResult: OnResult; children: (toggle: (next: boolean) => void) => ReactNode }) {
-  const fetcher = useFetcher<typeof action>({ key: `${kind}:${id}` });
+function Toggle({ id, onResult, children }: { id: string; onResult: OnResult; children: (toggle: (next: boolean) => void) => ReactNode }) {
+  const fetcher = useFetcher<typeof action>({ key: `machine:${id}` });
   const sent = useRef<ActionRequest | null>(null);
   useEffect(() => {
     const data = fetcher.data;
     if (data && sent.current && ("operation" in data || !data.ok)) onResult(sent.current, data);
   }, [fetcher.data, onResult]);
   return children((next) => {
-    sent.current = { kind, id, action: toggleAction(kind, next) };
+    sent.current = { kind: "machine", id, action: toggleAction("machine", next) };
     void fetcher.submit(sent.current, { method: "post" });
   });
 }
@@ -139,14 +142,18 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
     return () => clearInterval(t);
   }, []);
 
-  const sending = new Set(fetchers.filter((f) => f.state !== "idle" && /^(machine|deployment):/.test(f.key)).map((f) => f.key));
-  const active = hubActive(machines, deployments) ?? pendingActive(pending, deployments);
-  const refresh = usePolling(pollInterval(machines, deployments, sending.size > 0 || pending !== null), inflight || sending.size > 0);
-
   const onResult = useCallback<OnResult>((req, r) => {
     if (r.ok) setPending({ ...req, since: Date.now() });
     else setToasts((ts) => [...ts, toastFor(req, r, ++toastId.current, Date.now())]);
   }, []);
+  const { logs, posting, opened, startStop } = useDeploymentLogs(deployments, {
+    accepted: (req, operation) => onResult(req, { ok: true, operation }), failed: onResult, ended: () => refresh(),
+  });
+
+  const sending = new Set(fetchers.filter((f) => f.state !== "idle" && f.key.startsWith("machine:")).map((f) => f.key));
+  posting.forEach((id) => sending.add(`deployment:${id}`));
+  const active = hubActive(machines, deployments) ?? pendingActive(pending, deployments);
+  const refresh = usePolling(pollInterval(machines, deployments, sending.size > 0 || pending !== null), inflight || sending.size > 0);
   const dismiss = useCallback((id: number) => setToasts((ts) => ts.filter((t) => t.id !== id)), []);
 
   const disabled = error !== null || !hasData;
@@ -176,7 +183,7 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
             {machines && deployments
               ? <>
                   {Object.entries(machines.machines).map(([id, m], i) => (
-                    <Toggle key={id} kind="machine" id={id} onResult={onResult}>
+                    <Toggle key={id} id={id} onResult={onResult}>
                       {(toggle) => (
                         <MachineCard id={id} machine={m} deployments={deployments.deployments} active={active}
                           busy={busyOf(`machine:${id}`, machineInvolved(id, active))} disabled={disabled} now={now} index={i} onToggle={toggle} />
@@ -188,16 +195,16 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
               : <SkeletonGrid kind="machine" count={4} />}
           </Panel>
           <Panel id="h-d" cmd="deployments" noun="deployment" className={`grid-d${reveal ? " reveal" : ""}`}
-            displays={deployments && Object.values(deployments.deployments).map(deploymentDisplay)}>
+            displays={deployments && Object.entries(deployments.deployments).map(([id, d]) => deploymentDisplay(d, deploymentFailed(d, logs[id])))}>
             {machines && deployments
-              ? Object.entries(deployments.deployments).map(([id, d], i) => (
-                  <Toggle key={id} kind="deployment" id={id} onResult={onResult}>
-                    {(toggle) => (
-                      <DeploymentCard id={id} deployment={d} machines={machines.machines} active={active}
-                        busy={busyOf(`deployment:${id}`, deploymentInvolved(id, active))} disabled={disabled} now={now} index={i + 3} onToggle={toggle} />
-                    )}
-                  </Toggle>
-                ))
+              ? <>
+                  {Object.entries(deployments.deployments).map(([id, d], i) => (
+                    <DeploymentCard key={id} id={id} deployment={d} machines={machines.machines} active={active} log={logs[id]} openOn={opened[id]}
+                      busy={busyOf(`deployment:${id}`, deploymentInvolved(id, active))} disabled={disabled} now={now} index={i + 3}
+                      onToggle={(next) => startStop(id, next ? "start" : "stop")} />
+                  ))}
+                  <AddDeployment disabled={disabled} machines={machines.machines} />
+                </>
               : <SkeletonGrid kind="deployment" count={3} />}
           </Panel>
           <footer className="foot">

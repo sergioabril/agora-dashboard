@@ -2,9 +2,11 @@
 
 ## 1. Intro
 
-Agora Dashboard is a small server-rendered web app (PWA) for observing agora-hub's machines and deployments, switching them on/off or starting/stopping them, adding machines, and configuring the hub's Home Assistant integration on a settings page. It keeps no state of its own: every view and action goes through the hub's admin API.
+Agora Dashboard is a small server-rendered web app (PWA) for observing agora-hub's machines and deployments, switching them on/off or starting/stopping them, adding and editing machines, adding and editing deployments, and configuring the hub's Home Assistant integration on a settings page. Deployment logs stream live while a deployment starts or stops. It keeps no state of its own: every view and action goes through the hub's admin API.
 
 ## 2. Quick install
+
+It needs an agora-hub with the streamed-deployments API (FEATURE-HUB: NDJSON start/stop and `GET /admin/deployments/{id}/output`).
 
 Clone:
 
@@ -61,6 +63,12 @@ Open `http://<host>:4444`. For development without a real hub, run `npm run fake
 The app refuses to start if the URL is missing or malformed, or if the token is anything other than the values above (the value is never printed).
 
 In the add form, **test ssh** asks the hub to try the SSH login with the entered host, port, user and password or key, without saving the machine; the result shows in the form. A newly added machine needs no extra step: the hub trusts its SSH host key on the first connection. If a machine's key changes later (for example after a reinstall), its card shows **auth error** until the old key is removed from the hub's `known_hosts` (see the agora-hub README).
+
+**Edit host**: click a machine card's art to edit that host (locked while the hub is offline or the machine has an operation running). The form is prefilled from the hub; `password` and `sudo_password` start blank, and a blank one keeps the saved password. A cleared optional field goes back to its default (a blank `port` saves as 22). There is no **test ssh** when editing: the dashboard never sees saved passwords.
+
+**Add/edit deployment**: **+ add deployment** (after the deployment cards) opens a form; click a deployment card's topology art to edit it. Fields: `name`; `machines`, a checklist of every host (offline ones too; Space toggles, ↑/↓ move); `head`, picked from the checked machines (the first one you check becomes head, unchecking the head clears it until you pick another); `start_command` and `stop_command`, an absolute path that may take arguments and runs on the head from the SSH user's home; and `endpoint`, the full URL the hub GETs to probe it (any 2xx = up). There is no test button; the hub validates on save and its message shows in the form. Editing is locked while the deployment starts or stops.
+
+**Deployment log**: a deployment card's **log** shows the hub's output line by line (`hub│` hub steps, `out│` stdout, `err│` stderr) live while the deployment starts or stops, and replays the whole log after a reload. Your own start or stop opens the drawer by itself. If your own start or stop fails and the deployment ends up stopped, the card shows a red **failed** until the page is reloaded.
 
 **Settings → integrations → home assistant** opens a form for the hub's Home Assistant `host`, `port` and token. **test** checks the connection without saving; **save** writes it to the hub's `hub.yaml`, and an empty token turns the integration off. While it's online, **switches** on the box lists Home Assistant's `switch.*` entities, their state and the machines plugged into them (read-only). The token is shown in the form, so anyone who can open port `4444` can read it.
 

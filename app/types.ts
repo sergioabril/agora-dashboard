@@ -14,6 +14,11 @@ export type Active = { action: string; target: string; machines: string[] };
 export type Machine = {
   name: string;
   host: string;
+  user: string;
+  port: number;
+  key_path: string | null;
+  plug_entity_id: string;
+  shutdown_command: string;
   device: string;
   reachable: boolean;
   error: string | null;
@@ -22,21 +27,27 @@ export type Machine = {
   operation: Operation | null;
 };
 
-export type DeploymentState = "starting" | "running" | "stopping" | "stopped" | "failed" | "unknown";
+export type DeploymentState = "starting" | "running" | "stopping" | "stopped";
 
 export type Deployment = {
   name: string;
-  endpoint: string;
   machines: string[];
   head: string;
+  start_command: string;
+  stop_command: string;
+  endpoint: string;
   observed_state: DeploymentState;
-  script_state: DeploymentState | null;
   ready: boolean;
-  discrepancy: boolean;
-  errors: string[];
+  error: string | null;
   checked_at: string;
   operation: Operation | null;
 };
+
+export type SavedDeployment = { id: string; name: string; machines: string[]; head: string; start_command: string; stop_command: string; endpoint: string };
+
+export type LogLine = { source: "hub" | "stdout" | "stderr"; text: string; at: string };
+export type StreamEvent = { type: "operation" | "end"; operation: Operation } | ({ type: "line" } & LogLine);
+export type DeploymentLog = { startedAt: string; lines: LogLine[]; open: boolean; own: boolean; end: Operation | null };
 
 export type AddedMachine = {
   id: string;

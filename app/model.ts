@@ -1,5 +1,5 @@
 import type {
-  Active, Deployment, DeploymentsStatus, HomeAssistantSettings, HomeAssistantSwitch, HubResult, LoginTest, Machine, MachinesStatus,
+  Active, Deployment, DeploymentLog, DeploymentsStatus, HomeAssistantSettings, HomeAssistantSwitch, HubResult, LoginTest, Machine, MachinesStatus,
 } from "./types";
 
 export type LedColor = "green" | "yellow" | "red" | "orange" | "dim";
@@ -42,22 +42,15 @@ export const switchTone = (state: string): LedColor => (state === "on" ? "green"
 const switchRank = (s: HomeAssistantSwitch) => (s.machines.length ? 0 : s.state === "on" ? 1 : s.state === "off" ? 2 : 3);
 export const sortSwitches = (list: HomeAssistantSwitch[]) => [...list].sort((a, b) => switchRank(a) - switchRank(b));
 
-export function deploymentDisplay(d: Deployment): Display {
-  switch (d.observed_state) {
-    case "running":
-      return d.ready
-        ? { led: "green", pulse: false, label: "running" }
-        : { led: "yellow", pulse: false, label: "running · not ready" };
-    case "starting":
-    case "stopping":
-      return { led: "yellow", pulse: true, label: d.observed_state };
-    case "stopped":
-      return { led: "dim", pulse: false, label: "stopped" };
-    case "failed":
-      return { led: "red", pulse: false, label: "failed" };
-    default:
-      return { led: "orange", pulse: false, label: "unknown" };
-  }
+export function deploymentDisplay(d: Deployment, failed = false): Display {
+  if (d.observed_state === "running") return { led: "green", pulse: false, label: "running" };
+  if (d.observed_state !== "stopped") return { led: "yellow", pulse: true, label: d.observed_state };
+  return failed ? { led: "red", pulse: false, label: "failed" } : { led: "dim", pulse: false, label: "stopped" };
+}
+
+// Red "failed" only after this page's own start/stop stream ended failed and the deployment is now stopped.
+export function deploymentFailed(d: Deployment, log: DeploymentLog | undefined): boolean {
+  return Boolean(log?.own && log.end?.status === "failed" && log.startedAt === d.operation?.started_at && d.observed_state === "stopped");
 }
 
 export function machineOn(m: Machine): boolean {
@@ -65,7 +58,7 @@ export function machineOn(m: Machine): boolean {
 }
 
 export function deploymentOn(d: Deployment): boolean {
-  return d.observed_state === "starting" || d.observed_state === "running" || d.ready;
+  return d.observed_state === "starting" || d.observed_state === "running";
 }
 
 export type RoleChip = { role: "HEAD" | "WORKER"; deployment: string; name: string };

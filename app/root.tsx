@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
 import type { Route } from "./+types/root";
 import stylesheet from "./app.css?url";
+import { PowerOn } from "./components/Boot";
+import { Rail, type Hub } from "./components/Rail";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preload", href: "/fonts/JetBrainsMono-Regular.woff2", as: "font", type: "font/woff2", crossOrigin: "anonymous" },
@@ -39,8 +42,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+// The shell (rail, power-on) stays mounted across client-side navigations, so only the first load plays the power-on.
 export default function App() {
-  return <Outlet />;
+  const [hub, setHub] = useState<Hub>({ link: "connecting" });
+  return (
+    <>
+      <Rail hub={hub} />
+      <PowerOn />
+      <Outlet context={setHub} />
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
