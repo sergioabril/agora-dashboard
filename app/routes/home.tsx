@@ -4,14 +4,15 @@ import type { Route } from "./+types/home";
 import { HOME_FIG } from "../ascii";
 import { AddMachine } from "../components/AddMachine";
 import { Banner } from "../components/Banner";
-import { Boot, PowerOn, type BootResult } from "../components/Boot";
+import { useFirstLoad } from "../components/anim";
+import { Boot, type BootResult } from "../components/Boot";
 import type { Busy } from "../components/Card";
 import { DeploymentCard } from "../components/DeploymentCard";
 import { Header, StatusLine } from "../components/Header";
 import { MachineCard } from "../components/MachineCard";
 import { Panel } from "../components/Panel";
 import { Ps1 } from "../components/Ps1";
-import { Rail } from "../components/Rail";
+import { useHub } from "../components/Rail";
 import { SkeletonGrid } from "../components/Skeleton";
 import { Toasts, type ToastData } from "../components/Toast";
 import { addMachine, deploymentAction, deploymentsStatus, machineAction, machinesStatus, testMachine } from "../hub.server";
@@ -76,11 +77,17 @@ function settled<T>(p: Promise<Timed<T>>): Promise<Timed<T>> {
   ]);
 }
 
+// The last data seen, kept across client-side navigations so coming back home shows it while it refreshes.
+// Only written in effects, so the server render and hydration always start empty.
+let seen: { machines: MachinesStatus | null; deployments: DeploymentsStatus | null; lastOkAt: number | null } =
+  { machines: null, deployments: null, lastOkAt: null };
+
 export default function Home({ loaderData: ld }: Route.ComponentProps) {
-  const [machines, setMachines] = useState<MachinesStatus | null>(null);
-  const [deployments, setDeployments] = useState<DeploymentsStatus | null>(null);
+  const firstLoad = useFirstLoad();
+  const [machines, setMachines] = useState(seen.machines);
+  const [deployments, setDeployments] = useState(seen.deployments);
   const [error, setError] = useState<HubError | null>(null);
-  const [lastOkAt, setLastOkAt] = useState<number | null>(null);
+  const [lastOkAt, setLastOkAt] = useState(seen.lastOkAt);
   const [inflight, setInflight] = useState(true);
   const [boot, setBoot] = useState<{ m: BootResult; d: BootResult; done: boolean }>({ m: null, d: null, done: false });
   const [reveal, setReveal] = useState(false);
@@ -114,13 +121,18 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
     };
   }, [ld]);
 
-  const hasData = Boolean(machines && deployments);
   useEffect(() => {
-    if (!hasData) return;
+    seen = { machines, deployments, lastOkAt };
+  }, [machines, deployments, lastOkAt]);
+
+  const hasData = Boolean(machines && deployments);
+  const [hadData] = useState(hasData);
+  useEffect(() => {
+    if (!hasData || hadData) return;
     setReveal(true);
     const t = setTimeout(() => setReveal(false), 1500);
     return () => clearTimeout(t);
-  }, [hasData]);
+  }, [hasData, hadData]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -142,18 +154,17 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
     sending.has(key) ? "active" : active ? (involved ? "active" : "waiting") : sending.size ? "waiting" : null;
   const op = active && (machines?.machines[active.target]?.operation ?? deployments?.deployments[active.target]?.operation);
   const startedAt = op?.status === "in_progress" ? op.started_at : pending ? new Date(pending.since).toISOString() : null;
+  useHub(error ? "offline" : hasData ? "ok" : "connecting", error?.message);
 
   return (
     <>
-      <Rail page="home" hub={error ? "offline" : hasData ? "ok" : "connecting"} title={error?.message} />
-      <PowerOn />
       <main id="main">
         <div className={`wrap${error && hasData ? " stale" : ""}`}>
           <Header command="cd ~/home && hub status --watch" fig={HOME_FIG} label="home" refreshing={inflight} onRefresh={refresh}>
             <StatusLine machines={machines} deployments={deployments} refreshing={inflight} offline={error !== null}
               rejected={error?.kind === "unauthorized"} lastOkAt={lastOkAt} now={now} />
           </Header>
-          <Boot machines={boot.m} deployments={boot.d} done={boot.done} />
+          {firstLoad && <Boot machines={boot.m} deployments={boot.d} done={boot.done} />}
           <div className="banners" aria-live="polite">
             {error?.kind === "unauthorized" && <Banner kind="rejected" />}
             {error && error.kind !== "unauthorized" && <Banner kind="offline" message={error.message} lastOkAt={lastOkAt} />}

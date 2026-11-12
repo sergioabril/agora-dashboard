@@ -12,6 +12,18 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
+let hydrated = false;
+
+// True for components mounted by the first document load (server render and hydration), false for those mounted
+// later by a client-side navigation: load-time effects (boot log, typing after the power-on) play only once.
+export function useFirstLoad(): boolean {
+  const [first] = useState(() => !hydrated);
+  useEffect(() => {
+    hydrated = true;
+  }, []);
+  return first;
+}
+
 export function useTick(ms: number, enabled = true): number {
   const [tick, setTick] = useState(0);
   useEffect(() => {

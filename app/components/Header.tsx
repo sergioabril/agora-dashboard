@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ago } from "../format";
 import { machineDisplay } from "../model";
 import type { DeploymentsStatus, MachinesStatus } from "../types";
-import { useReducedMotion } from "./anim";
+import { useFirstLoad, useReducedMotion } from "./anim";
 import { Ps1 } from "./Ps1";
 import { MonoSpin } from "./Spinner";
 
@@ -20,6 +20,7 @@ type Props = { command: string; fig: string; label: string; refreshing: boolean;
 
 function useTyped(text: string): string {
   const reduced = useReducedMotion();
+  const first = useFirstLoad();
   const [n, setN] = useState(0);
   useEffect(() => {
     if (reduced) return setN(text.length);
@@ -29,9 +30,9 @@ function useTyped(text: string): string {
       setN(++i);
       if (i < text.length) t = setTimeout(step, 24 + Math.random() * 38);
     };
-    t = setTimeout(step, 520);
+    t = setTimeout(step, first ? 520 : 0); // the first load waits for the power-on
     return () => clearTimeout(t);
-  }, [text, reduced]);
+  }, [text, reduced, first]);
   return text.slice(0, n);
 }
 
