@@ -2,6 +2,9 @@ import type {
   AddedMachine,
   DeploymentAction,
   DeploymentsStatus,
+  HomeAssistantChanges,
+  HomeAssistantSettings,
+  HomeAssistantSwitch,
   HubError,
   HubResult,
   LoginTest,
@@ -104,3 +107,13 @@ export const addMachine = (machine: Record<string, string | number>) =>
 
 export const testMachine = (machine: Record<string, string | number>) =>
   request<LoginTest>("POST", "/admin/machines/test", machine);
+
+const HA = "/admin/integrations/homeassistant";
+
+export const homeAssistant = () => request<HomeAssistantSettings>("GET", HA);
+
+export const saveHomeAssistant = (changes: HomeAssistantChanges) => request<HomeAssistantSettings>("POST", HA, changes);
+
+export const testHomeAssistant = (changes: HomeAssistantChanges) => request<LoginTest>("POST", `${HA}/test`, changes);
+
+export const homeAssistantSwitches = () => request<{ switches: HomeAssistantSwitch[] }>("GET", `${HA}/switches`);

@@ -1,4 +1,4 @@
-import type { Active, Deployment, DeploymentsStatus, Machine, MachinesStatus } from "./types";
+import type { Active, Deployment, DeploymentsStatus, HomeAssistantSettings, HubResult, LoginTest, Machine, MachinesStatus } from "./types";
 
 export type LedColor = "green" | "yellow" | "red" | "orange" | "dim";
 export type Display = { led: LedColor; pulse: boolean; label: string };
@@ -25,6 +25,16 @@ export function machineDisplay(m: Machine): Display {
   if (m.shutdown_requested) return { led: "dim", pulse: false, label: "off" };
   return { led: "orange", pulse: false, label: "offline" };
 }
+
+export function homeAssistantDisplay(settings: HomeAssistantSettings, check: "pending" | HubResult<LoginTest> | null): Display {
+  if (settings.token === "") return { led: "dim", pulse: false, label: "off" };
+  if (check === "pending" || check === null) return { led: "yellow", pulse: true, label: "checking" };
+  if (!check.ok) return { led: "orange", pulse: false, label: "unknown" };
+  if (!check.data.reachable) return { led: "orange", pulse: false, label: "offline" };
+  return check.data.error ? { led: "red", pulse: false, label: "rejected" } : { led: "green", pulse: false, label: "online" };
+}
+
+export const switchTone = (state: string): LedColor => (state === "on" ? "green" : state === "off" ? "dim" : "orange");
 
 export function deploymentDisplay(d: Deployment): Display {
   switch (d.observed_state) {

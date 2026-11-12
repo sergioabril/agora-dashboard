@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher, useFetchers } from "react-router";
 import type { Route } from "./+types/home";
+import { HOME_FIG } from "../ascii";
 import { AddMachine } from "../components/AddMachine";
 import { Banner } from "../components/Banner";
 import { Boot, PowerOn, type BootResult } from "../components/Boot";
 import type { Busy } from "../components/Card";
 import { DeploymentCard } from "../components/DeploymentCard";
-import { Header } from "../components/Header";
+import { Header, StatusLine } from "../components/Header";
 import { MachineCard } from "../components/MachineCard";
 import { Panel } from "../components/Panel";
 import { Ps1 } from "../components/Ps1";
@@ -144,13 +145,14 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
 
   return (
     <>
-      <Rail hub={error ? "offline" : hasData ? "ok" : "connecting"} title={error?.message} />
+      <Rail page="home" hub={error ? "offline" : hasData ? "ok" : "connecting"} title={error?.message} />
       <PowerOn />
       <main id="main">
         <div className={`wrap${error && hasData ? " stale" : ""}`}>
-          <Header machines={machines} deployments={deployments} refreshing={inflight} offline={error !== null}
-            rejected={error?.kind === "unauthorized"}
-            lastOkAt={lastOkAt} now={now} onRefresh={refresh} />
+          <Header command="cd ~/home && hub status --watch" fig={HOME_FIG} label="home" refreshing={inflight} onRefresh={refresh}>
+            <StatusLine machines={machines} deployments={deployments} refreshing={inflight} offline={error !== null}
+              rejected={error?.kind === "unauthorized"} lastOkAt={lastOkAt} now={now} />
+          </Header>
           <Boot machines={boot.m} deployments={boot.d} done={boot.done} />
           <div className="banners" aria-live="polite">
             {error?.kind === "unauthorized" && <Banner kind="rejected" />}

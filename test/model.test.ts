@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deploymentDisplay, deploymentInvolved, deploymentOn, machineDisplay, machineInvolved, machineOn,
-  pollInterval, roleLabels, actionLabel,
+  pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone,
 } from "../app/model";
 import type { Deployment, DeploymentsStatus, Machine, MachinesStatus, Operation } from "../app/types";
 
@@ -78,5 +78,20 @@ describe("polling interval", () => {
     expect(pollInterval(ms(machine()), ds(deployment()), true)).toBe(3000);
     expect(pollInterval(ms(machine(), { action: "on", target: "a", machines: ["a"] }), null, false)).toBe(3000);
     expect(pollInterval(null, ds(deployment({ operation: running("stop") })), false)).toBe(3000);
+  });
+});
+
+describe("home assistant display", () => {
+  it("maps settings and the check to a status, and switch states to tones", () => {
+    const ha = { host: "h", port: 8123, token: "t", power_cycle_delay_seconds: 5 };
+    const ok = (reachable: boolean, error: string | null) => ({ ok: true as const, data: { reachable, error } });
+    expect(homeAssistantDisplay({ ...ha, token: "" }, ok(true, null))).toEqual({ led: "dim", pulse: false, label: "off" });
+    expect(homeAssistantDisplay(ha, "pending")).toEqual({ led: "yellow", pulse: true, label: "checking" });
+    expect(homeAssistantDisplay(ha, null)).toEqual({ led: "yellow", pulse: true, label: "checking" });
+    expect(homeAssistantDisplay(ha, { ok: false, error: { kind: "timeout", status: null, message: "x" } })).toEqual({ led: "orange", pulse: false, label: "unknown" });
+    expect(homeAssistantDisplay(ha, ok(true, null))).toEqual({ led: "green", pulse: false, label: "online" });
+    expect(homeAssistantDisplay(ha, ok(true, "http: 401"))).toEqual({ led: "red", pulse: false, label: "rejected" });
+    expect(homeAssistantDisplay(ha, ok(false, "http: refused"))).toEqual({ led: "orange", pulse: false, label: "offline" });
+    expect(["on", "off", "unavailable"].map(switchTone)).toEqual(["green", "dim", "orange"]);
   });
 });

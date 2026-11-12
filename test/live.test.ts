@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionResult, parseAction, parseMachine, pendingActive, toastFor } from "../app/live";
+import { actionResult, parseAction, parseHomeAssistant, parseMachine, pendingActive, toastFor } from "../app/live";
 import type { Operation } from "../app/types";
 
 const op: Operation = { action: "on", status: "in_progress", started_at: "2026-11-09T08:00:00+00:00", finished_at: null, error: null, output: "" };
@@ -61,5 +61,12 @@ describe("busy gate after a 202", () => {
     const deployments = { deployments: { pro: { machines: ["spark-1", "spark-2"] } }, active: null } as never;
     expect(pendingActive({ kind: "deployment", id: "pro", action: "start", since: 0 }, deployments)?.machines).toEqual(["spark-1", "spark-2"]);
     expect(pendingActive(null, deployments)).toBeNull();
+  });
+});
+
+describe("home assistant form", () => {
+  it("trims fields, numbers the port and always sends the token", () => {
+    expect(parseHomeAssistant({ intent: "save", host: " ha.lan ", port: "8124", token: " t " })).toEqual({ host: "ha.lan", port: 8124, token: "t" });
+    expect(parseHomeAssistant({ host: "", port: "", token: "" })).toEqual({ token: "" });
   });
 });

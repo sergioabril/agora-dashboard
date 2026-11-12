@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { HOME_FIG } from "../ascii";
+import { useEffect, useState, type ReactNode } from "react";
 import { ago } from "../format";
 import { machineDisplay } from "../model";
 import type { DeploymentsStatus, MachinesStatus } from "../types";
@@ -7,9 +6,7 @@ import { useReducedMotion } from "./anim";
 import { Ps1 } from "./Ps1";
 import { MonoSpin } from "./Spinner";
 
-const COMMAND = "cd ~/home && hub status --watch";
-
-type Props = {
+type StatusProps = {
   machines: MachinesStatus | null;
   deployments: DeploymentsStatus | null;
   refreshing: boolean;
@@ -17,8 +14,9 @@ type Props = {
   rejected?: boolean;
   lastOkAt: number | null;
   now: number;
-  onRefresh: () => void;
 };
+
+type Props = { command: string; fig: string; label: string; refreshing: boolean; onRefresh: () => void; children: ReactNode };
 
 function useTyped(text: string): string {
   const reduced = useReducedMotion();
@@ -37,7 +35,7 @@ function useTyped(text: string): string {
   return text.slice(0, n);
 }
 
-function StatusLine({ machines, deployments, refreshing, offline, rejected, lastOkAt, now }: Omit<Props, "onRefresh">) {
+export function StatusLine({ machines, deployments, refreshing, offline, rejected, lastOkAt, now }: StatusProps) {
   if (!machines) {
     return offline ? (
       <><span className="bad">{rejected ? "hub rejected token" : "hub unreachable"}</span><i>·</i>no data yet</>
@@ -62,9 +60,8 @@ function StatusLine({ machines, deployments, refreshing, offline, rejected, last
   );
 }
 
-export function Header(props: Props) {
-  const typed = useTyped(COMMAND);
-  const { refreshing, onRefresh } = props;
+export function Header({ command, fig, label, refreshing, onRefresh, children }: Props) {
+  const typed = useTyped(command);
   const reduced = useReducedMotion();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,13 +81,13 @@ export function Header(props: Props) {
             <span className="cursor" />
           </div>
           <h1 className="title">
-            <span className="sr">home</span>
-            <pre className="fig" aria-hidden="true">{HOME_FIG}</pre>
-            <pre className="fig ghost g1" aria-hidden="true">{HOME_FIG}</pre>
-            <pre className="fig ghost g2" aria-hidden="true">{HOME_FIG}</pre>
+            <span className="sr">{label}</span>
+            <pre className="fig" aria-hidden="true">{fig}</pre>
+            <pre className="fig ghost g1" aria-hidden="true">{fig}</pre>
+            <pre className="fig ghost g2" aria-hidden="true">{fig}</pre>
           </h1>
           <p className="statusline">
-            <StatusLine {...props} />
+            {children}
           </p>
         </div>
         <div className="top-r">

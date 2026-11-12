@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useRevalidator } from "react-router";
 import type { ToastData } from "./components/Toast";
-import type { Active, AddedMachine, DeploymentAction, DeploymentsStatus, HubError, HubResult, LoginTest, MachineAction, Operation } from "./types";
+import type {
+  Active, AddedMachine, DeploymentAction, DeploymentsStatus, HomeAssistantChanges, HomeAssistantSettings, HubError, HubResult, LoginTest, MachineAction, Operation,
+} from "./types";
 
 export type Kind = "machine" | "deployment";
 export type ActionRequest = { kind: Kind; id: string; action: MachineAction | DeploymentAction };
@@ -20,7 +22,7 @@ export type Pending = ActionRequest & { since: number };
 const ALLOWED: Record<Kind, readonly string[]> = { machine: ["on", "off"], deployment: ["start", "stop"] };
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-const invalid = (message: string): ActionFailure => ({ ok: false, status: 422, code: "invalid_request", message, blocking: null });
+export const invalid = (message: string): ActionFailure => ({ ok: false, status: 422, code: "invalid_request", message, blocking: null });
 
 export function parseAction(fields: Record<string, unknown>): { ok: true; request: ActionRequest } | ActionFailure {
   const { kind, id, action } = fields;
@@ -45,6 +47,16 @@ export function addResult(r: HubResult<AddedMachine>): AddResult {
 
 export function testResult(r: HubResult<LoginTest>): TestResult {
   return r.ok ? { ok: true, login: r.data } : failure(r.error);
+}
+
+export function saveResult(r: HubResult<HomeAssistantSettings>): { ok: true; settings: HomeAssistantSettings } | ActionFailure {
+  return r.ok ? { ok: true, settings: r.data } : failure(r.error);
+}
+
+export function parseHomeAssistant(fields: Record<string, unknown>): HomeAssistantChanges {
+  const text = (k: string) => (typeof fields[k] === "string" ? (fields[k] as string).trim() : "");
+  const [host, port] = [text("host"), text("port")];
+  return { ...(host && { host }), ...(port && { port: /^\d+$/.test(port) ? Number(port) : port }), token: text("token") };
 }
 
 const MACHINE_FIELDS = ["name", "host", "user", "port", "password", "key_path", "sudo_password", "plug_entity_id", "device", "shutdown_command"];

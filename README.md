@@ -2,7 +2,7 @@
 
 ## 1. Intro
 
-Agora Dashboard is a small server-rendered web app (PWA) for observing agora-hub's machines and deployments, switching them on/off or starting/stopping them, and adding machines. It keeps no state of its own: every view and action goes through the hub's admin API.
+Agora Dashboard is a small server-rendered web app (PWA) for observing agora-hub's machines and deployments, switching them on/off or starting/stopping them, adding machines, and configuring the hub's Home Assistant integration on a settings page. It keeps no state of its own: every view and action goes through the hub's admin API.
 
 ## 2. Quick install
 
@@ -61,6 +61,8 @@ Open `http://<host>:4444`. For development without a real hub, run `npm run fake
 The app refuses to start if the URL is missing or malformed, or if the token is anything other than the values above (the value is never printed).
 
 In the add form, **test ssh** asks the hub to try the SSH login with the entered host, port, user and password or key, without saving the machine; the result shows in the form. A newly added machine needs no extra step: the hub trusts its SSH host key on the first connection. If a machine's key changes later (for example after a reinstall), its card shows **auth error** until the old key is removed from the hub's `known_hosts` (see the agora-hub README).
+
+**Settings → integrations → home assistant** opens a form for the hub's Home Assistant `host`, `port` and token. **test** checks the connection without saving; **save** writes it to the hub's `hub.yaml`, and an empty token turns the integration off. While it's online, **switches** on the box lists Home Assistant's `switch.*` entities, their state and the machines plugged into them (read-only). The token is shown in the form, so anyone who can open port `4444` can read it.
 
 Icons: replace the placeholders in `public/icons/` with files of the same name and size, then rebuild. `icon-192.png` (192×192), `icon-512.png` (512×512) and `icon-maskable-512.png` (512×512, content inside the safe zone) are referenced by `public/manifest.webmanifest`; `apple-touch-icon.png` (180×180) and `favicon.svg` are linked from the page head.
 

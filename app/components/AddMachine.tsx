@@ -9,7 +9,7 @@ import { MonoSpin } from "./Spinner";
 const TEXT = { type: "text", autoComplete: "off" } as const;
 const SECRET = { type: "password", autoComplete: "new-password" } as const;
 
-function Field({ name, wide, ...input }: { name: string; wide?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
+export function Field({ name, wide, ...input }: { name: string; wide?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className={`af-f${wide ? " w2" : ""}`}>
       <span className="af-l">{name}{input.required && <i aria-hidden="true">*</i>}</span>
@@ -19,7 +19,7 @@ function Field({ name, wide, ...input }: { name: string; wide?: boolean } & Reac
 }
 
 // A keyed fetcher keeps its last data across opens; only data that arrived after `mark()` counts.
-function useSubmission(key: string) {
+export function useSubmission(key: string) {
   const fetcher = useFetcher<typeof action>({ key });
   const [sent, setSent] = useState<{ base: unknown } | null>(null);
   const busy = sent !== null && fetcher.state !== "idle";

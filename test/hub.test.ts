@@ -108,3 +108,18 @@ describe("startup validation", () => {
     expect(init.headers).not.toHaveProperty("Authorization");
   });
 });
+
+describe("home assistant client", () => {
+  it("calls the hub's integration endpoints", async () => {
+    const fetch = stub(200, {});
+    await hub.homeAssistant();
+    await hub.saveHomeAssistant({ host: "10.0.0.9" });
+    await hub.testHomeAssistant({});
+    await hub.homeAssistantSwitches();
+    const calls = (fetch.mock.calls as unknown as [string, RequestInit][]).map(([url, init]) => [url, init.method, init.body]);
+    const base = "http://hub.test:3334/admin/integrations/homeassistant";
+    expect(calls).toEqual([
+      [base, "GET", undefined], [base, "POST", '{"host":"10.0.0.9"}'], [`${base}/test`, "POST", "{}"], [`${base}/switches`, "GET", undefined],
+    ]);
+  });
+});

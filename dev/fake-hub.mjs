@@ -1,4 +1,5 @@
 // Dev-only fake agora-hub on :3334 (never :3333). Ports test-webs/mock.js with the real hub's error bodies.
+// Home Assistant: an empty token is "not configured", a host starting with "down" is unreachable, token "wrong" gets a 401.
 import crypto from "node:crypto";
 import http from "node:http";
 
@@ -186,7 +187,59 @@ function machineRequest(raw, test) {
   return [201, m];
 }
 
+const HA_DEFAULTS = { host: "homeassistant.local", port: 8123, token: "", power_cycle_delay_seconds: 5 };
+const ha = { ...HA_DEFAULTS };
+const e401 = (c) => `http: Client error '401 Unauthorized' for url 'http://${c.host}:${c.port}/api/'`;
+
+// Merges like the hub's _merge (null resets, a null or "" token unsets) and validates; returns [settings] or [null, 422 body].
+function mergeHa(raw) {
+  let body;
+  try {
+    body = JSON.parse(raw || "{}");
+  } catch {}
+  const at = (k, msg) => [null, [422, { detail: `invalid configuration at ${k}: ${msg}` }]];
+  if (!body || typeof body !== "object" || Array.isArray(body)) return at("", "Input should be a valid dictionary");
+  const c = { ...ha };
+  for (const [k, v] of Object.entries(body)) {
+    if (!(k in HA_DEFAULTS)) return at(k, "Extra inputs are not permitted");
+    c[k] = v === null ? HA_DEFAULTS[k] : v;
+  }
+  if (typeof c.host !== "string" || !/^[A-Za-z0-9.-]+$/.test(c.host)) return at("host", "String should match pattern '^[A-Za-z0-9.-]+$'");
+  if (typeof c.port === "string" && /^\s*\d+\s*$/.test(c.port)) c.port = Number(c.port);
+  if (!Number.isInteger(c.port)) return at("port", "Input should be a valid integer, unable to parse string as an integer");
+  if (c.port < 1 || c.port > 65535) return at("port", c.port < 1 ? "Input should be greater than or equal to 1" : "Input should be less than or equal to 65535");
+  return [c];
+}
+
+function haSwitches() {
+  if (!ha.token) return [409, { detail: { code: "home_assistant_not_configured", message: "home assistant token is not set", blocking: null } }];
+  if (ha.host.startsWith("down")) return [502, { detail: "http: All connection attempts failed" }];
+  if (ha.token === "wrong") return [502, { detail: e401(ha) }];
+  const switches = [
+    { entity_id: "switch.garage", name: "Garage", state: "unavailable", machines: [] },
+    { entity_id: "switch.lamp", name: "switch.lamp", state: "off", machines: [] },
+    ...Object.entries(machines).map(([id, m]) => ({
+      entity_id: `switch.${id.replace(/-/g, "_")}`, name: `${m.name} plug`, state: m.reachable ? "on" : "off", machines: [id],
+    })),
+  ];
+  return [200, { switches: switches.sort((a, b) => a.entity_id.localeCompare(b.entity_id)) }];
+}
+
+async function haRoute(method, path, raw) {
+  await latency();
+  if (method === "GET" && path === "") return [200, { ...ha }];
+  if (method === "GET" && path === "/switches") return haSwitches();
+  if (method !== "POST" || (path !== "" && path !== "/test")) return [404, { detail: "Not Found" }];
+  const [c, failed] = mergeHa(raw);
+  if (failed) return failed;
+  if (path === "") return [200, { ...Object.assign(ha, c) }];
+  if (!c.token) return [200, { reachable: false, error: "not_configured: home assistant token is not set" }];
+  if (c.host.startsWith("down")) return [200, { reachable: false, error: "http: All connection attempts failed" }];
+  return [200, { reachable: true, error: c.token === "wrong" ? e401(c) : null }];
+}
+
 async function route(method, path, raw) {
+  if (path.startsWith("/admin/integrations/homeassistant")) return haRoute(method, path.slice(33), raw);
   if (method === "GET" && path === "/admin/machines/status") {
     await latency();
     const out = {};

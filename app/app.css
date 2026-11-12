@@ -512,6 +512,32 @@ dialog.addm[open] .win{animation:toast-in .28s cubic-bezier(.2,.8,.2,1)}
 .win-cmd .c2{color:var(--fg)}
 @media (max-width:640px){
   .af input,.af select{font-size:16px;padding:7px 8px}
+  .win .fr .bl{font-size:9.5px}
+}
+
+/* ───────── settings: integrations list ───────── */
+.nav .cog{display:inline-block;width:1ch;text-align:center}
+.grid-l{grid-template-columns:minmax(0,1fr);gap:12px}
+.hal .fr-body{padding-top:10px;padding-bottom:9px}
+.hal-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px}
+.hab{all:unset;box-sizing:border-box;flex:1 1 320px;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px 22px;cursor:pointer}
+.hab:focus-visible{outline:1px dashed var(--f1);outline-offset:4px}
+.hab:disabled{cursor:not-allowed;opacity:.55;filter:saturate(.3)}
+.hab .art{--ao:var(--cl);font-size:10px;line-height:1.1;filter:drop-shadow(0 0 4px var(--ca))}
+.hal-id{flex:1 1 24ch;min-width:0;display:flex;flex-direction:column;gap:3px}
+.hal-id b{color:var(--fg-hi);font-size:14px;font-weight:600}
+.hal-id .muted{overflow-wrap:anywhere}
+.hal-go{color:var(--f1);text-shadow:var(--glow-f)}
+.hab:hover .hal-go{color:var(--fg-hi)}
+.hal .term{container-type:inline-size}
+.sw-row{display:grid;grid-template-columns:16ch 18ch 12ch minmax(0,1fr);gap:0 1.4ch;align-items:center}
+.sw-n{color:var(--fg)}
+.sw-e{color:var(--fg-3)}
+.sw-s{color:var(--cl)}
+.sw-m .chip{font-size:10px;line-height:15px}
+@container (max-width:440px){
+  .sw-row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"n s" "e m"}
+  .sw-n{grid-area:n}.sw-s{grid-area:s;text-align:right}.sw-e{grid-area:e}.sw-m{grid-area:m;justify-content:flex-end}
 }
 
 /* ───────── phone: rail becomes a bottom tab bar ───────── */

@@ -149,6 +149,9 @@ export function topology(machines: string[], head: string): TopoCell[][] {
 
 export const LOGO = "▁▂▄▆█▆▄▂▁\n▀▀▀▀▀▀▀▀▀\n █ █ █ █\n █ █ █ █\n▀▀▀▀▀▀▀▀▀";
 export const HOME_FIG = "█ █ █▀█ █▀▄▀█ █▀▀\n█▀█ █▄█ █ ▀ █ ██▄";
+export const SETTINGS_FIG = "█▀▀ █▀▀ ▀█▀ ▀█▀ █ █▄ █ █▀▀ █▀▀\n▄▄█ ██▄  █   █  █ █ ▀█ █▄█ ▄▄█";
+export const HOUSE_ART = ["    ┌───┐", " ┌──┘ ◉ └──┐", " │ ╭──┴──╮ │", " │ ○ ┌─┐ ● │", " └───┴─┴───┘"];
+export const COG = "\u2699\uFE0E";
 
 export const SP_ACT = "▙▛▜▟";
 export const SP_MONO = Array.from("⣾⣽⣻⢿⡿⣟⣯⣷");

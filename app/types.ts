@@ -52,6 +52,10 @@ export type AddedMachine = {
 
 export type LoginTest = { reachable: boolean; error: string | null };
 
+export type HomeAssistantSettings = { host: string; port: number; token: string; power_cycle_delay_seconds: number };
+export type HomeAssistantChanges = { host?: string; port?: number | string; token?: string };
+export type HomeAssistantSwitch = { entity_id: string; name: string; state: string; machines: string[] };
+
 export type MachinesStatus = { machines: Record<string, Machine>; active: Active | null };
 export type DeploymentsStatus = { deployments: Record<string, Deployment>; active: Active | null };
 
