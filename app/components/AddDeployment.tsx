@@ -96,9 +96,9 @@ function DeploymentForm({ dlg, machines, id, deployment: d, path }: Props & { pa
         <Field name="start_command" {...TEXT} required wide defaultValue={d?.start_command} placeholder="/home/agora/<name>/start.sh" aria-describedby={`${hid}-cmd`} />
         <Field name="stop_command" {...TEXT} required wide defaultValue={d?.stop_command} placeholder="/home/agora/<name>/stop.sh" aria-describedby={`${hid}-cmd`} />
         <p className="af-hint w2" id={`${hid}-cmd`}>absolute path, may take arguments · runs on head from the SSH user's home, stdin closed</p>
-        <Field name="endpoint" type="url" autoComplete="off" required wide defaultValue={d?.endpoint} placeholder="http://spark-1.local:8000/v1/models"
+        <Field name="endpoint" type="url" autoComplete="off" required wide defaultValue={d?.endpoint} placeholder="http://spark-1.local:8000/v1"
           aria-describedby={`${hid}-ep`} />
-        <p className="af-hint w2" id={`${hid}-ep`}>full URL the hub GETs; any 2xx = up</p>
+        <p className="af-hint w2" id={`${hid}-ep`}>OpenAI base URL agents use, usually ends in /v1 · the hub GETs &lt;endpoint&gt;/models; any 2xx = up</p>
       </div>
       {failure && (
         <p className="af-err" role="alert"><b>✗ {failure.status ?? "request failed"}{failure.status === 409 && ` ${failure.code}`}</b> · {failure.message}</p>

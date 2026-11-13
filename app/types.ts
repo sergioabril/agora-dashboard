@@ -38,6 +38,7 @@ export type Deployment = {
   endpoint: string;
   observed_state: DeploymentState;
   ready: boolean;
+  models: string[];
   error: string | null;
   checked_at: string;
   operation: Operation | null;

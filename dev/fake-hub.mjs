@@ -32,31 +32,33 @@ const DEFAULTS = { port: 22, key_path: null, shutdown_command: SHUTDOWN, device:
 for (const [id, m] of Object.entries(machines)) Object.assign(m, { user: "agora", port: 22, key_path: null, plug_entity_id: `switch.${id.replace(/-/g, "_")}`, shutdown_command: SHUTDOWN, password: "agora" });
 const seed = (operation, lines) => lines.map(([source, text], i) =>
   ({ type: "line", source, text, at: new Date(Date.parse(operation.started_at) + i * 1500).toISOString() }));
-const deployment = (name, machineIds, endpoint, ready, operation, log, start = `/home/agora/${name.toLowerCase()}/start.sh`) => ({
+// `served` is what GET <endpoint>/models lists while the deployment is ready.
+const deployment = (name, served, machineIds, endpoint, ready, operation, log, start = `/home/agora/${name.toLowerCase()}/start.sh`) => ({
   name, machines: machineIds, head: machineIds[0], start_command: start, stop_command: `/home/agora/${name.toLowerCase()}/stop.sh`,
-  endpoint, ready, operation, log: operation ? seed(operation, log) : [], followers: new Set(),
+  endpoint, served, ready, operation, log: operation ? seed(operation, log) : [], followers: new Set(),
 });
+const modelsUrl = (d) => `${String(d.endpoint).replace(/\/+$/, "")}/models`;
 const proStop = op("stop", "succeeded", 3 * H, 14e3);
 const flashStart = op("start", "succeeded", 4.5 * H, 412e3);
 const visionStart = op("start", "failed", 2 * H, 180e3, "unavailable machines: rtx-1");
 const deployments = {
-  pro: deployment("Pro", ["spark-1", "spark-2", "spark-3", "spark-4"], "http://spark-1.local:8000/v1/models", false, proStop, [
+  pro: deployment("Pro", ["qwen3-235b-a22b-instruct", "qwen3-235b-a22b-instruct-lora-agents"], ["spark-1", "spark-2", "spark-3", "spark-4"], "http://spark-1.local:8000/v1", false, proStop, [
     ["hub", "running /home/agora/pro/stop.sh on spark-1"], ["stdout", "[stop] sending SIGTERM to ray head"], ["stdout", "[stop] workers drained (3/3)"], ["hub", "exited 0"]]),
-  flash: deployment("Flash", ["spark-3", "spark-4"], "http://spark-3.local:8001/v1/models", true, flashStart, [
+  flash: deployment("Flash", ["qwen3-30b-a3b-instruct"], ["spark-3", "spark-4"], "http://spark-3.local:8001/v1", true, flashStart, [
     ["hub", "running /home/agora/flash/start.sh on spark-3"], ["stdout", "[start] launching serve on spark-3 (tp=2)"], ["stdout", "[start] loading weights 100%"],
     ["hub", "exited 0"], ["hub", "waiting for http://spark-3.local:8001/v1/models"], ["hub", "ready"]]),
-  vision: deployment("Vision", ["rtx-1"], "http://10.0.0.61:8000/v1/models", false, visionStart, [["hub", "waking rtx-1"]]),
-  tiny: deployment("Tiny", ["spark-2"], "http://spark-2.local:8002/v1/models", false, null, [], "/home/agora/tiny/fail.sh"),
+  vision: deployment("Vision", ["qwen2.5-vl-72b-instruct"], ["rtx-1"], "http://10.0.0.61:8000/v1", false, visionStart, [["hub", "waking rtx-1"]]),
+  tiny: deployment("Tiny", ["gemma-3-4b-it"], ["spark-2"], "http://spark-2.local:8002/v1", false, null, [], "/home/agora/tiny/fail.sh"),
 };
 let active = null;
 
 const inProgress = (d) => d.operation?.status === "in_progress";
 
 function deploymentObservation(id) {
-  const { followers, log, ready, operation, ...config } = deployments[id];
+  const { followers, log, served, ready, operation, ...config } = deployments[id];
   const observed = inProgress(deployments[id]) ? (operation.action === "start" ? "starting" : "stopping") : ready ? "running" : "stopped";
   const error = ready ? null : observed === "starting" ? "http: endpoint returned HTTP 503" : "http: All connection attempts failed";
-  return { ...clone(config), observed_state: observed, ready, error, checked_at: iso(), operation: clone(operation) };
+  return { ...clone(config), observed_state: observed, ready, models: ready ? [...served] : [], error, checked_at: iso(), operation: clone(operation) };
 }
 
 const send = (res, event) => res.write(JSON.stringify(event) + "\n");
@@ -140,7 +142,7 @@ const work = {
       await wait(1500);
     }
     say("hub", "exited 0");
-    say("hub", `waiting for ${d.endpoint}`);
+    say("hub", `waiting for ${modelsUrl(d)}`);
     await wait(3500);
     d.ready = true;
     say("hub", "ready");
@@ -266,7 +268,7 @@ function saveDeployment(id, raw) {
   if (unknown) return [422, { detail: `unknown machine in ${newId}: ${unknown}` }];
   if (!d.machines.includes(d.head)) return [422, { detail: `head is not in machines for ${newId}` }];
   if (id) Object.assign(deployments[id], d);
-  else deployments[newId] = { ...d, ready: false, operation: null, log: [], followers: new Set() };
+  else deployments[newId] = { ...d, served: [String(d.name).trim().toLowerCase().replace(/\s+/g, "-")], ready: false, operation: null, log: [], followers: new Set() };
   return [id ? 200 : 201, { id: newId, ...clone(d) }];
 }
 

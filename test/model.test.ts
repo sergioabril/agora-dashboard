@@ -11,7 +11,7 @@ const machine = (over: Partial<Machine> = {}): Machine => ({
 });
 const deployment = (over: Partial<Deployment> = {}): Deployment => ({
   name: "Pro", machines: ["spark-1", "spark-2"], head: "spark-1", start_command: "/s.sh", stop_command: "/t.sh", endpoint: "http://x/",
-  observed_state: "stopped", ready: false, error: null, checked_at: at, operation: null, ...over,
+  observed_state: "stopped", ready: false, models: [], error: null, checked_at: at, operation: null, ...over,
 });
 const running = (action: string): Operation => ({ action, status: "in_progress", started_at: at, finished_at: null, error: null, output: "" });
 

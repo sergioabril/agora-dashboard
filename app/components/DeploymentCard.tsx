@@ -44,7 +44,7 @@ async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, label }: { text: string; label: string }) {
   const [state, setState] = useState<null | boolean>(null);
   const ref = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -56,7 +56,7 @@ function CopyButton({ text }: { text: string }) {
     timer.current = setTimeout(() => setState(null), 1600);
   }
   return (
-    <button ref={ref} type="button" className={`copy${state ? " done" : ""}`} aria-label="Copy endpoint URL" onClick={onClick}>
+    <button ref={ref} type="button" className={`copy${state ? " done" : ""}`} aria-label={label} onClick={onClick}>
       {state === null ? "⎘ copy" : state ? "✓ copied" : "✗ copy failed"}
     </button>
   );
@@ -96,7 +96,7 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
           // A failing probe is expected while not running, so it is a plain row, not a red error.
           rows: [["observed", d.observed_state], ["ready", d.ready ? "yes" : "no"], ...(d.error ? [["probe", d.error] as [string, string]] : [])],
           errors: [],
-          okNote: d.ready ? "endpoint answered 2xx" : undefined,
+          okNote: d.ready ? "/models answered 2xx" : undefined,
         }}
         busyLabel={active ? actionLabel(active.action) : "sending"}
         control={
@@ -116,10 +116,21 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
             </div>
             <div className="ep">
               <span className="ep-url">{d.endpoint}</span>
-              <CopyButton text={d.endpoint} />
+              <CopyButton text={d.endpoint} label="Copy endpoint URL" />
             </div>
           </div>
         </div>
+        {d.models.length > 0 && (
+          <div className="mdl" role="group" aria-label={`Served model${d.models.length > 1 ? "s" : ""}`}>
+            <span className="mdl-l"><Led tone="green" pulse />{d.models.length > 1 ? "models" : "model"}</span>
+            {d.models.map((m) => (
+              <span key={m} className="mdl-r">
+                <span className="mdl-id">{m}</span>
+                <CopyButton text={m} label={`Copy model id ${m}`} />
+              </span>
+            ))}
+          </div>
+        )}
         <dl className="kv">
           <dt>nodes</dt>
           <dd className="chips">
