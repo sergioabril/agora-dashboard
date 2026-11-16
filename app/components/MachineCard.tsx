@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { ago } from "../format";
-import { actionLabel, machineDisplay, machineInvolved, machineOn, machineRoles } from "../model";
+import { actionLabel, machineDisplay, machineInvolved, machineOn, machineOpOutlived, machineRoles } from "../model";
 import type { Active, Deployment, Machine } from "../types";
 import { MachineDialog, useDialog } from "./AddMachine";
 import { AsciiArt } from "./AsciiArt";
@@ -29,6 +29,7 @@ export function MachineCard({ id, machine: m, deployments, active, busy, disable
   const display = machineDisplay(m);
   const roles = machineRoles(id, deployments);
   const on = machineOn(m);
+  const outlived = machineOpOutlived(m);
   const art = useRef<HTMLButtonElement>(null);
   const dlg = useDialog(art);
   return (
@@ -41,7 +42,7 @@ export function MachineCard({ id, machine: m, deployments, active, busy, disable
         busy={busy}
         index={index}
         op={m.operation}
-        hasError={Boolean(m.error || m.operation?.error)}
+        hasError={Boolean(m.error || (m.operation?.error && !outlived))}
         obs={{
           checkedAt: m.checked_at,
           rows: [["reachable", m.reachable ? "yes" : "no"], ["shutdown_requested", m.shutdown_requested ? "yes" : "no"]],
@@ -85,7 +86,7 @@ export function MachineCard({ id, machine: m, deployments, active, busy, disable
           </dd>
           <dt>last</dt>
           <dd>
-            <LastOp op={m.operation} now={now} />
+            <LastOp op={m.operation} now={now} outlived={outlived} />
           </dd>
         </dl>
       </CardFrame>

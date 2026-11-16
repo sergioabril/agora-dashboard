@@ -1,5 +1,5 @@
 import type {
-  Active, Deployment, DeploymentLog, DeploymentsStatus, HomeAssistantSettings, HomeAssistantSwitch, HubResult, LoginTest, Machine, MachinesStatus,
+  Active, Deployment, DeploymentLog, DeploymentsStatus, HomeAssistantSettings, HomeAssistantSwitch, HubResult, LoginTest, Machine, MachinesStatus, Operation,
 } from "./types";
 
 export type LedColor = "green" | "yellow" | "red" | "orange" | "dim";
@@ -58,6 +58,19 @@ export function withLog(d: Deployment, log: DeploymentLog | undefined): Deployme
   if (!log || (d.operation && Date.parse(log.startedAt) <= Date.parse(d.operation.started_at))) return d;
   const going = log.op.status === "in_progress";
   return { ...d, operation: log.op, observed_state: going ? (log.op.action === "start" ? "starting" : "stopping") : d.observed_state };
+}
+
+// A failed or cancelled operation whose goal the latest observation shows reached anyway is history, not a current error:
+// e.g. an `on` that timed out while the machine was still booting, and the machine came up later.
+const outlived = (op: Operation | null, reached: boolean) => Boolean(op && (op.status === "failed" || op.status === "cancelled") && reached);
+
+export function machineOpOutlived(m: Machine): boolean {
+  return outlived(m.operation, m.operation?.action === "on" ? m.reachable && !m.error : !m.reachable);
+}
+
+// Only a start can be outlived: "running" proves the endpoint answers, while "stopped" says nothing about a failed stop command.
+export function deploymentOpOutlived(op: Operation | null, d: Deployment): boolean {
+  return outlived(op, op?.action === "start" && d.observed_state === "running");
 }
 
 export function machineOn(m: Machine): boolean {

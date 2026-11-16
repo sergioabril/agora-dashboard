@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ago } from "../format";
-import { actionLabel, deploymentDisplay, deploymentFailed, deploymentOn, machineDisplay, withLog } from "../model";
+import { actionLabel, deploymentDisplay, deploymentFailed, deploymentOn, deploymentOpOutlived, machineDisplay, withLog } from "../model";
 import type { Active, Deployment, DeploymentLog, Machine } from "../types";
 import { DeploymentDialog } from "./AddDeployment";
 import { useDialog } from "./AddMachine";
@@ -67,6 +67,7 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
   const failed = deploymentFailed(d, log);
   const display = deploymentDisplay(d, failed);
   const same = log && log.startedAt === d.operation?.started_at ? log : null;
+  const op = same?.op ?? d.operation;
   const art = useRef<HTMLButtonElement>(null);
   const dlg = useDialog(art);
   const locked = disabled || active?.target === id || d.operation?.status === "in_progress";
@@ -87,10 +88,10 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
         index={index}
         failed={failed}
         openOn={openOn}
-        op={same?.op ?? d.operation}
+        op={op}
         lines={same?.lines ?? null}
         live={Boolean(same?.open)}
-        hasError={Boolean((same?.op ?? d.operation)?.error)}
+        hasError={Boolean(op?.error && !deploymentOpOutlived(op, d))}
         obs={{
           checkedAt: d.checked_at,
           // A failing probe is expected while not running, so it is a plain row, not a red error.
@@ -148,7 +149,7 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
           </dd>
           <dt>last</dt>
           <dd>
-            <LastOp op={d.operation} now={now} />
+            <LastOp op={d.operation} now={now} outlived={deploymentOpOutlived(d.operation, d)} />
           </dd>
         </dl>
       </CardFrame>

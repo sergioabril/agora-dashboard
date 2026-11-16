@@ -69,7 +69,8 @@ export function CardFrame({ id, title, status, bottom, busy, busyLabel, index, o
   );
 }
 
-export function LastOp({ op, now }: { op: Operation | null; now: number }) {
+// `outlived`: the operation failed but its goal was reached later, so the failure is shown muted instead of red.
+export function LastOp({ op, now, outlived = false }: { op: Operation | null; now: number; outlived?: boolean }) {
   if (!op) return <span className="muted">— no operations yet</span>;
   if (op.status === "in_progress") {
     return (
@@ -79,13 +80,14 @@ export function LastOp({ op, now }: { op: Operation | null; now: number }) {
       </>
     );
   }
+  const x = <span className={outlived ? "muted" : "bad"}>✗</span>;
   const mark = op.status === "succeeded" ? <span className="ok">✓</span>
-    : op.status === "cancelled" ? <><span className="bad">✗</span> <span className="muted">cancelled</span></>
-    : <span className="bad">✗</span>;
+    : op.status === "cancelled" ? <>{x} <span className="muted">cancelled</span></>
+    : x;
   return (
     <>
       <span className="op-a">{op.action}</span> {mark} <span className="op-t">{hhmm(op.finished_at ?? op.started_at, now)}</span>
-      {op.error && <span className="op-e">{op.error}</span>}
+      {op.error && <span className={`op-e${outlived ? " outlived" : ""}`}>{op.error}</span>}
     </>
   );
 }

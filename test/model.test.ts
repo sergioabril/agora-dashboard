@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  deploymentDisplay, deploymentFailed, deploymentInvolved, deploymentOn, machineDisplay, machineInvolved, machineOn, withLog,
+  deploymentDisplay, deploymentFailed, deploymentInvolved, deploymentOn, deploymentOpOutlived, machineDisplay, machineInvolved, machineOn,
+  machineOpOutlived, withLog,
   pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone, sortSwitches,
 } from "../app/model";
 import type { Deployment, DeploymentsStatus, Machine, MachinesStatus, Operation } from "../app/types";
@@ -23,6 +24,21 @@ describe("machine display", () => {
     expect(machineDisplay(machine())).toMatchObject({ led: "green", label: "online" });
     expect(machineDisplay(machine({ reachable: false, shutdown_requested: true }))).toMatchObject({ led: "dim", label: "off" });
     expect(machineDisplay(machine({ reachable: false, error: "timeout" }))).toMatchObject({ led: "orange", label: "offline" });
+  });
+  it("treats a failed operation as outlived once its goal is observed", () => {
+    const failed = (action: string): Operation => ({ ...running(action), status: "failed", finished_at: at, error: "machine did not become reachable before timeout" });
+    expect(machineOpOutlived(machine({ operation: failed("on") }))).toBe(true);
+    expect(machineOpOutlived(machine({ operation: { ...failed("on"), status: "cancelled" } }))).toBe(true);
+    expect(machineOpOutlived(machine({ reachable: false, operation: failed("on") }))).toBe(false);
+    expect(machineOpOutlived(machine({ error: "auth: denied", operation: failed("on") }))).toBe(false);
+    expect(machineOpOutlived(machine({ reachable: false, operation: failed("off") }))).toBe(true);
+    expect(machineOpOutlived(machine({ operation: failed("off") }))).toBe(false);
+    expect(machineOpOutlived(machine({ operation: { ...failed("on"), status: "succeeded", error: null } }))).toBe(false);
+    expect(machineOpOutlived(machine())).toBe(false);
+    expect(deploymentOpOutlived(failed("start"), deployment({ observed_state: "running", ready: true }))).toBe(true);
+    expect(deploymentOpOutlived(failed("start"), deployment())).toBe(false);
+    expect(deploymentOpOutlived(failed("stop"), deployment())).toBe(false);
+    expect(deploymentOpOutlived(null, deployment())).toBe(false);
   });
   it("switch is on when reachable", () => {
     expect(machineOn(machine())).toBe(true);
