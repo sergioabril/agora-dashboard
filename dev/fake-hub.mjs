@@ -33,8 +33,8 @@ for (const [id, m] of Object.entries(machines)) Object.assign(m, { user: "agora"
 const seed = (operation, lines) => lines.map(([source, text], i) =>
   ({ type: "line", source, text, at: new Date(Date.parse(operation.started_at) + i * 1500).toISOString() }));
 // `served` is what GET <endpoint>/models lists while the deployment is ready.
-const deployment = (name, served, machineIds, endpoint, ready, operation, log, start = `/home/agora/${name.toLowerCase()}/start.sh`) => ({
-  name, machines: machineIds, head: machineIds[0], start_command: start, stop_command: `/home/agora/${name.toLowerCase()}/stop.sh`,
+const deployment = (name, kind, served, machineIds, endpoint, ready, operation, log, start = `/home/agora/${name.toLowerCase()}/start.sh`) => ({
+  name, kind, machines: machineIds, head: machineIds[0], start_command: start, stop_command: `/home/agora/${name.toLowerCase()}/stop.sh`,
   endpoint, served, ready, operation, log: operation ? seed(operation, log) : [], followers: new Set(),
 });
 const modelsUrl = (d) => `${String(d.endpoint).replace(/\/+$/, "")}/models`;
@@ -42,13 +42,14 @@ const proStop = op("stop", "succeeded", 3 * H, 14e3);
 const flashStart = op("start", "succeeded", 4.5 * H, 412e3);
 const visionStart = op("start", "failed", 2 * H, 180e3, "unavailable machines: rtx-1");
 const deployments = {
-  pro: deployment("Pro", ["qwen3-235b-a22b-instruct", "qwen3-235b-a22b-instruct-lora-agents"], ["spark-1", "spark-2", "spark-3", "spark-4"], "http://spark-1.local:8000/v1", false, proStop, [
+  pro: deployment("Pro", "llm", ["qwen3-235b-a22b-instruct", "qwen3-235b-a22b-instruct-lora-agents"], ["spark-1", "spark-2", "spark-3", "spark-4"], "http://spark-1.local:8000/v1", false, proStop, [
     ["hub", "running /home/agora/pro/stop.sh on spark-1"], ["stdout", "[stop] sending SIGTERM to ray head"], ["stdout", "[stop] workers drained (3/3)"], ["hub", "exited 0"]]),
-  flash: deployment("Flash", ["qwen3-30b-a3b-instruct"], ["spark-3", "spark-4"], "http://spark-3.local:8001/v1", true, flashStart, [
+  flash: deployment("Flash", "llm", ["qwen3-30b-a3b-instruct"], ["spark-3", "spark-4"], "http://spark-3.local:8001/v1", true, flashStart, [
     ["hub", "running /home/agora/flash/start.sh on spark-3"], ["stdout", "[start] launching serve on spark-3 (tp=2)"], ["stdout", "[start] loading weights 100%"],
     ["hub", "exited 0"], ["hub", "waiting for http://spark-3.local:8001/v1/models"], ["hub", "ready"]]),
-  vision: deployment("Vision", ["qwen2.5-vl-72b-instruct"], ["rtx-1"], "http://10.0.0.61:8000/v1", false, visionStart, [["hub", "waking rtx-1"]]),
-  tiny: deployment("Tiny", ["gemma-3-4b-it"], ["spark-2"], "http://spark-2.local:8002/v1", false, null, [], "/home/agora/tiny/fail.sh"),
+  vision: deployment("Vision", "llm", ["qwen2.5-vl-72b-instruct"], ["rtx-1"], "http://10.0.0.61:8000/v1", false, visionStart, [["hub", "waking rtx-1"]]),
+  tiny: deployment("Tiny", "llm", ["gemma-3-4b-it"], ["spark-2"], "http://spark-2.local:8002/v1", false, null, [], "/home/agora/tiny/fail.sh"),
+  canvas: deployment("Canvas", "image", ["qwen-image-edit"], ["spark-2"], "http://spark-2.local:8003/v1", true, null, []),
 };
 let active = null;
 
@@ -240,7 +241,7 @@ function machineRequest(raw, test, id) {
   return [created ? 201 : 200, { id, ...view }];
 }
 
-const DEPLOYMENT_FIELDS = ["name", "machines", "head", "start_command", "stop_command", "endpoint"];
+const DEPLOYMENT_FIELDS = ["name", "kind", "machines", "head", "start_command", "stop_command", "endpoint"];
 
 // Mirrors POST /admin/deployments/add and /{id}/update: merge (null drops a key), validate like the hub, save.
 function saveDeployment(id, raw) {
@@ -257,6 +258,7 @@ function saveDeployment(id, raw) {
   const missing = DEPLOYMENT_FIELDS.find((k) => !(k in d));
   if (missing) return invalid(missing, "Field required");
   if (!String(d.name).trim()) return invalid("name", "String should have at least 1 character");
+  if (!["llm", "image"].includes(d.kind)) return invalid("kind", "Input should be 'llm' or 'image'");
   if (!Array.isArray(d.machines)) return invalid("machines", "Input should be a valid list");
   for (const k of ["start_command", "stop_command"]) {
     if (!String(d[k]).trim().startsWith("/")) return invalid(k, "Value error, must start with an absolute path");
@@ -339,7 +341,10 @@ async function route(method, path, raw) {
     await latency();
     const out = {};
     for (const id of Object.keys(deployments)) out[id] = deploymentObservation(id);
-    return [200, { deployments: out, active: clone(active) }];
+    // Like the hub: each target is the first deployment of its kind that is ready, lists models and has no operation in progress.
+    const pick = (kind) => Object.keys(out).find((id) => out[id].kind === kind && out[id].ready && out[id].models.length && !inProgress(deployments[id])) ?? null;
+    const host = process.env.FAKE_GATEWAY_HOST === "none" ? null : "100.101.7.12";
+    return [200, { deployments: out, active: clone(active), gateway: { host, port: 8888, agora: pick("llm"), image: pick("image") } }];
   }
   if (method === "POST" && (path === "/admin/machines/add" || path === "/admin/machines/test")) {
     await latency();

@@ -48,9 +48,9 @@ describe("deployment form", () => {
 
   it("sends every checked machine, trims text, and blanks are omitted on add but null on update", () => {
     const form = new FormData();
-    for (const [k, v] of [["intent", "x"], ["name", " Mini "], ["machines", "a"], ["machines", "b"], ["head", "b"], ["start_command", " /s.sh "],
+    for (const [k, v] of [["intent", "x"], ["name", " Mini "], ["kind", "image"], ["machines", "a"], ["machines", "b"], ["head", "b"], ["start_command", " /s.sh "],
       ["stop_command", ""], ["endpoint", "http://a:1/v1"]]) form.append(k, v);
-    const add = { machines: ["a", "b"], name: "Mini", head: "b", start_command: "/s.sh", endpoint: "http://a:1/v1" };
+    const add = { machines: ["a", "b"], name: "Mini", kind: "image", head: "b", start_command: "/s.sh", endpoint: "http://a:1/v1" };
     expect(parseDeployment(form)).toEqual(add);
     expect(parseDeployment(form, true)).toEqual({ ...add, stop_command: null });
   });

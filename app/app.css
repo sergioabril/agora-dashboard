@@ -312,6 +312,7 @@ main{margin-left:var(--rw);padding:calc(28px + env(safe-area-inset-top)) clamp(1
 .kv dt{color:rgba(129,161,193,.78);font-size:11px;letter-spacing:.02em}
 .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .kv .host{color:var(--fg-hi)}
+.kv .tools{color:var(--fg)}
 .muted{color:var(--fg-3)}
 .op-a{color:var(--fg-hi);font-weight:600}
 .ok{color:var(--green);text-shadow:0 0 7px rgba(163,190,140,.5)}
@@ -357,12 +358,20 @@ main{margin-left:var(--rw);padding:calc(28px + env(safe-area-inset-top)) clamp(1
 .d-name{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;font-size:22px;font-weight:700;line-height:1.15;color:var(--fg-hi);letter-spacing:-.01em;text-shadow:var(--glow-s)}
 .badge-ready{font-size:10px;font-weight:800;letter-spacing:.18em;padding:3px 6px 2px 8px;border-radius:1px;color:var(--n0);background:var(--green);text-shadow:none;box-shadow:0 0 14px rgba(163,190,140,.5)}
 .badge-nr{font-size:10px;font-weight:700;letter-spacing:.14em;padding:2px 6px 1px 7px;border:1px solid rgba(76,86,106,.95);color:var(--fg-3);text-shadow:none}
-.ep{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin-top:7px;font-size:11.5px;min-width:0}
-.ep-url{color:var(--f1);overflow-wrap:anywhere;min-width:0;text-shadow:var(--glow-f)}
+.kb{font-size:10px;font-weight:700;letter-spacing:.16em;padding:2px 5px 1px 7px;border:1px solid currentColor;border-radius:1px;text-shadow:none;line-height:1.3}
+.kb.llm{color:var(--f1);box-shadow:inset 0 0 8px rgba(136,192,208,.18)}
+.kb.image{color:var(--purple);box-shadow:inset 0 0 8px rgba(180,142,173,.2)}
+.ep-up{margin-top:7px;font-size:11px;line-height:1.45;color:var(--fg-3);text-shadow:none;overflow-wrap:anywhere}
 .copy{all:unset;flex:none;cursor:pointer;font-size:11px;color:var(--fg-3);padding:1px 3px;margin:-1px -3px;border-radius:2px}
 .copy:hover{color:var(--f1)}
 .copy:focus-visible{outline:1px dashed var(--f1)}
 .copy.done{color:var(--green)}
+/* gateway: the deployments header summary is the two gateway addresses to copy, then the running count */
+.gwh{display:inline-flex;align-items:baseline;gap:0 1ch;min-width:0;white-space:nowrap}
+.gwh .k{color:rgba(129,161,193,.85)}
+.gwh .u{color:var(--f1);text-shadow:var(--glow-f);white-space:normal;overflow-wrap:anywhere}
+.gwh .copy{margin:0 0 0 .4ch}
+.ph .sum .gwh + .sm{margin-left:1ch}
 /* served model ids, shown only while /models answers: a lit green rectangle that breathes, with a light sweeping across it */
 .mdl{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:3px;margin:-2px 0 13px;padding:7px 11px 8px;
   border:1px solid rgba(163,190,140,.8);border-radius:2px;
@@ -376,6 +385,8 @@ main{margin-left:var(--rw);padding:calc(28px + env(safe-area-inset-top)) clamp(1
 .mdl-l{position:relative;display:flex;align-items:center;gap:.8ch;font-size:10px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;
   color:var(--green);text-shadow:0 0 7px rgba(163,190,140,.6)}
 .mdl-l .led{width:6px;height:6px}
+.ag{margin-left:auto;padding:1px 6px;border:1px solid rgba(143,188,187,.75);border-radius:1px;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:none;
+  color:var(--f0);background:rgba(143,188,187,.12);text-shadow:0 0 7px rgba(143,188,187,.6)}
 .mdl-r{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
 .mdl-id{min-width:0;overflow-wrap:anywhere;font-size:14px;font-weight:700;color:var(--fg-hi);text-shadow:0 0 1px rgba(163,190,140,.7), 0 0 10px rgba(163,190,140,.45)}
 
@@ -554,7 +565,7 @@ dialog.addm[open] .win{animation:toast-in .28s cubic-bezier(.2,.8,.2,1)}
 .win .fr{text-shadow:0 0 8px rgba(136,192,208,.45)}
 .win .fr-body{position:relative;z-index:1;max-height:calc(100dvh - 72px);overflow:auto;padding-top:14px;padding-bottom:14px;gap:12px}
 .win .ttl b{color:var(--f1)}
-.win-cmd{font-size:11.5px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win-cmd{flex:none;font-size:11.5px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .win-cmd .c2{color:var(--fg)}
 .af-ferr{margin:5px 0 0;font-size:11px;line-height:1.4;color:#D9848C}
 .af select[aria-invalid="true"]{border-color:rgba(191,97,106,.8)}
@@ -578,6 +589,22 @@ dialog.addm[open] .win{animation:toast-in .28s cubic-bezier(.2,.8,.2,1)}
 .ck .af-l .muted{font-size:10.5px}
 .ck-list[aria-invalid="true"]{border-color:rgba(191,97,106,.8)}
 .ck-head select{max-width:30ch}
+/* kind: TUI radio rows in the checklist's box, (•) / ( ) drawn from :checked; one row without descriptions on phone */
+.rd-list{display:grid;grid-template-columns:4ch 7ch minmax(0,1fr);column-gap:1.4ch;border:1px solid var(--line);border-radius:2px;background:rgba(30,34,42,.72);padding:4px 0}
+.rd-list[aria-invalid="true"]{border-color:rgba(191,97,106,.8)}
+.rd-row{position:relative;grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:baseline;padding:4px 10px;font-size:12px;line-height:1.5;color:var(--fg-2);
+  cursor:pointer;user-select:none;-webkit-user-select:none}
+.rd-row:hover{background:rgba(94,129,172,.1)}
+.rd-row:has(:focus-visible){background:rgba(136,192,208,.12);box-shadow:inset 2px 0 0 var(--f1)}
+.rd-b{color:var(--fg-4);white-space:pre}
+.rd-b::before{content:"( )"}
+.rd-row:has(:checked){color:var(--fg-hi)}
+.rd-row:has(:checked) .rd-b{color:var(--f1);text-shadow:var(--glow-f)}
+.rd-row.image:has(:checked) .rd-b{color:var(--purple);text-shadow:0 0 7px rgba(180,142,173,.6)}
+.rd-row:has(:checked) .rd-b::before{content:"(•)"}
+.rd-n{font-weight:600}
+.rd-d{color:var(--fg-3);font-size:11px;min-width:0}
+.rd-row:has(:checked) .rd-d{color:var(--fg-2)}
 @container (max-width:420px){
   .ck-list{grid-template-columns:4ch minmax(0,1fr) max-content 6ch;column-gap:1.1ch}
   .ck-h{display:none}
@@ -585,6 +612,9 @@ dialog.addm[open] .win{animation:toast-in .28s cubic-bezier(.2,.8,.2,1)}
 }
 @media (max-width:640px){
   .af input,.af select{font-size:16px;padding:7px 8px}
+  .rd-d{display:none}
+  .rd-list{display:flex;gap:0 2ch;padding:2px 4px}
+  .rd-row{display:flex;gap:1.2ch;padding:3px 8px}
   .win .fr .bl{font-size:9.5px}
 }
 
@@ -657,6 +687,8 @@ dialog.addm[open] .win{animation:toast-in .28s cubic-bezier(.2,.8,.2,1)}
   .topo-wrap{min-width:78px;padding:0 6px}
   .topo{font-size:12px}
   .d-name{font-size:20px}
+  .ph .sum{gap:4px 1.8ch}
+  .ph .sum .gwh + .sm{margin-left:0}
 }
 
 /* ───────── reduced motion ───────── */

@@ -20,6 +20,7 @@ type Props = {
   disabled: boolean;
   now: number;
   index?: number;
+  agora: boolean;
   onToggle: (next: boolean) => void;
 };
 
@@ -44,7 +45,7 @@ async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({ text, label }: { text: string; label: string }) {
   const [state, setState] = useState<null | boolean>(null);
   const ref = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -62,7 +63,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-export function DeploymentCard({ id, deployment, machines, active, log, openOn, busy, disabled, now, index, onToggle }: Props) {
+export function DeploymentCard({ id, deployment, machines, active, log, openOn, busy, disabled, now, index, agora, onToggle }: Props) {
   const d = withLog(deployment, log);
   const failed = deploymentFailed(d, log);
   const display = deploymentDisplay(d, failed);
@@ -113,17 +114,17 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
           <div className="d-id">
             <div className="d-name">
               {d.name}
+              <span className={`kb ${d.kind}`}>{d.kind === "image" ? "IMG" : "LLM"}</span>
               {d.ready ? <span className="badge-ready">READY</span> : d.observed_state !== "stopped" && <span className="badge-nr">NOT READY</span>}
             </div>
-            <div className="ep">
-              <span className="ep-url">{d.endpoint}</span>
-              <CopyButton text={d.endpoint} label="Copy endpoint URL" />
-            </div>
+            <div className="ep-up">upstream {d.endpoint}</div>
           </div>
         </div>
         {d.models.length > 0 && (
           <div className="mdl" role="group" aria-label={`Served model${d.models.length > 1 ? "s" : ""}`}>
-            <span className="mdl-l"><Led tone="green" pulse />{d.models.length > 1 ? "models" : "model"}</span>
+            <span className="mdl-l"><Led tone="green" pulse />{d.models.length > 1 ? "models" : "model"}
+              {agora && <span className="ag" title="model: agora reaches this deployment">→ agora</span>}
+            </span>
             {d.models.map((m) => (
               <span key={m} className="mdl-r">
                 <span className="mdl-id">{m}</span>
@@ -147,6 +148,12 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
               <span className="chip none">none</span>
             )}
           </dd>
+          {d.kind === "image" && (
+            <>
+              <dt>tools</dt>
+              <dd className="tools">generate_image · edit_image <span className="muted">via /agent/v1</span></dd>
+            </>
+          )}
           <dt>last</dt>
           <dd>
             <LastOp op={d.operation} now={now} outlived={deploymentOpOutlived(d.operation, d)} />

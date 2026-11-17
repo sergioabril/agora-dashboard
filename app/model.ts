@@ -131,3 +131,9 @@ export function pollInterval(
   ].map((x) => x.operation);
   return ops.some((op) => op?.status === "in_progress") ? FAST_POLL_MS : IDLE_POLL_MS;
 }
+
+// The gateway shares the hub's host; a hub next to the dashboard is reached at the host the browser used. IPv6 keeps its brackets.
+export function gatewayHost(hubUrl: string, pageUrl: string): string {
+  const host = new URL(hubUrl).hostname;
+  return ["host.docker.internal", "localhost", "127.0.0.1", "[::1]"].includes(host) ? new URL(pageUrl).hostname : host;
+}

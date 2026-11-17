@@ -9,6 +9,7 @@ import { useFirstLoad } from "../components/anim";
 import { Boot, type BootResult } from "../components/Boot";
 import type { Busy } from "../components/Card";
 import { DeploymentCard } from "../components/DeploymentCard";
+import { Gateway } from "../components/Gateway";
 import { Header, StatusLine } from "../components/Header";
 import { MachineCard } from "../components/MachineCard";
 import { Panel } from "../components/Panel";
@@ -16,13 +17,13 @@ import { Ps1 } from "../components/Ps1";
 import { useHub } from "../components/Rail";
 import { SkeletonGrid } from "../components/Skeleton";
 import { Toasts, type ToastData } from "../components/Toast";
-import { addDeployment, addMachine, deploymentsStatus, machineAction, machinesStatus, testMachine, updateDeployment, updateMachine } from "../hub.server";
+import { addDeployment, addMachine, deploymentsStatus, hubUrl, machineAction, machinesStatus, testMachine, updateDeployment, updateMachine } from "../hub.server";
 import {
   actionResult, addResult, deploymentResult, parseAction, parseDeployment, parseMachine, pendingActive, testResult, toastFor, toggleAction,
   useDeploymentLogs, usePolling, type ActionRequest, type ActionResult, type AddResult, type DeploymentResult, type Pending, type TestResult,
 } from "../live";
 import {
-  deploymentDisplay, deploymentFailed, deploymentInvolved, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS, withLog,
+  deploymentDisplay, deploymentFailed, deploymentInvolved, gatewayHost, hubActive, machineDisplay, machineInvolved, pollInterval, STREAM_TIMEOUT_MS, withLog,
 } from "../model";
 import type { DeploymentsStatus, HubError, HubResult, MachinesStatus } from "../types";
 
@@ -30,10 +31,10 @@ export function meta() {
   return [{ title: "agora · home" }];
 }
 
-export function loader() {
+export function loader({ request }: Route.LoaderArgs) {
   const t0 = Date.now();
   const timed = <T,>(p: Promise<HubResult<T>>) => p.then((result) => ({ result, ms: Date.now() - t0 }));
-  return { now: t0, machines: timed(machinesStatus()), deployments: timed(deploymentsStatus()) };
+  return { now: t0, gatewayHost: gatewayHost(hubUrl(), request.url), machines: timed(machinesStatus()), deployments: timed(deploymentsStatus()) };
 }
 
 export async function action({ request }: Route.ActionArgs): Promise<ActionResult | AddResult | TestResult | DeploymentResult> {
@@ -164,6 +165,10 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
   const op = active && (machines?.machines[active.target]?.operation ?? deployments?.deployments[active.target]?.operation);
   const startedAt = op?.status === "in_progress" ? op.started_at : pending ? new Date(pending.since).toISOString() : null;
   useHub(error ? "offline" : hasData ? "ok" : "connecting", error?.message);
+  const dDisplays = deployments && Object.entries(deployments.deployments).map(([id, raw]) => {
+    const d = withLog(raw, logs[id]);
+    return deploymentDisplay(d, deploymentFailed(d, logs[id]));
+  });
 
   return (
     <>
@@ -197,16 +202,14 @@ export default function Home({ loaderData: ld }: Route.ComponentProps) {
               : <SkeletonGrid kind="machine" count={4} />}
           </Panel>
           <Panel id="h-d" cmd="deployments" noun="deployment" className={`grid-d${reveal ? " reveal" : ""}`}
-            displays={deployments && Object.entries(deployments.deployments).map(([id, raw]) => {
-              const d = withLog(raw, logs[id]);
-              return deploymentDisplay(d, deploymentFailed(d, logs[id]));
-            })}>
+            displays={dDisplays} sum={deployments && dDisplays && <Gateway gateway={deployments.gateway} host={deployments.gateway.host ?? ld.gatewayHost}
+              running={dDisplays.filter((d) => d.label === "running").length} />}>
             {machines && deployments
               ? <>
                   {Object.entries(deployments.deployments).map(([id, d], i) => (
                     <DeploymentCard key={id} id={id} deployment={d} machines={machines.machines} active={active} log={logs[id]} openOn={opened[id]}
                       busy={busyOf(`deployment:${id}`, deploymentInvolved(id, active))} disabled={disabled} now={now} index={i + 3}
-                      onToggle={(next) => startStop(id, next ? "start" : "stop")} />
+                      agora={deployments.gateway.agora === id} onToggle={(next) => startStop(id, next ? "start" : "stop")} />
                   ))}
                   <AddDeployment disabled={disabled} machines={machines.machines} />
                 </>

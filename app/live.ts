@@ -88,7 +88,7 @@ export type DeploymentFields = Record<string, string | string[] | null>;
 // Trimmed text fields; a blank one is omitted on add and sent as null on update (the hub then answers 422).
 export function parseDeployment(form: FormData, update = false): DeploymentFields {
   const out: DeploymentFields = { machines: form.getAll("machines").map(String) };
-  for (const k of ["name", "head", "start_command", "stop_command", "endpoint"]) {
+  for (const k of ["name", "kind", "head", "start_command", "stop_command", "endpoint"]) {
     const v = String(form.get(k) ?? "").trim();
     if (v) out[k] = v;
     else if (update) out[k] = null;

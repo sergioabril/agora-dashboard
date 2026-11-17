@@ -29,8 +29,11 @@ export type Machine = {
 
 export type DeploymentState = "starting" | "running" | "stopping" | "stopped";
 
+export type DeploymentKind = "llm" | "image";
+
 export type Deployment = {
   name: string;
+  kind: DeploymentKind;
   machines: string[];
   head: string;
   start_command: string;
@@ -44,7 +47,7 @@ export type Deployment = {
   operation: Operation | null;
 };
 
-export type SavedDeployment = { id: string; name: string; machines: string[]; head: string; start_command: string; stop_command: string; endpoint: string };
+export type SavedDeployment = { id: string; name: string; kind: DeploymentKind; machines: string[]; head: string; start_command: string; stop_command: string; endpoint: string };
 
 export type LogLine = { source: "hub" | "stdout" | "stderr"; text: string; at: string };
 export type StreamEvent = { type: "operation" | "end"; operation: Operation } | ({ type: "line" } & LogLine);
@@ -70,7 +73,8 @@ export type HomeAssistantChanges = { host?: string; port?: number | string; toke
 export type HomeAssistantSwitch = { entity_id: string; name: string; state: string; machines: string[] };
 
 export type MachinesStatus = { machines: Record<string, Machine>; active: Active | null };
-export type DeploymentsStatus = { deployments: Record<string, Deployment>; active: Active | null };
+export type Gateway = { host: string | null; port: number; agora: string | null; image: string | null };
+export type DeploymentsStatus = { deployments: Record<string, Deployment>; active: Active | null; gateway: Gateway };
 
 export type MachineAction = "on" | "off";
 export type DeploymentAction = "start" | "stop";

@@ -78,11 +78,11 @@ describe("hub client", () => {
 
   it("posts deployment add and update to their paths", async () => {
     const fetch = stub(200, { id: "pro" });
-    await hub.addDeployment({ name: "Mini", machines: ["spark-2"] });
+    await hub.addDeployment({ name: "Mini", kind: "image", machines: ["spark-2"] });
     await hub.updateDeployment("pro", { name: null, machines: [] });
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
     expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
-      ["http://hub.test:3334/admin/deployments/add", "POST", '{"name":"Mini","machines":["spark-2"]}'],
+      ["http://hub.test:3334/admin/deployments/add", "POST", '{"name":"Mini","kind":"image","machines":["spark-2"]}'],
       ["http://hub.test:3334/admin/deployments/pro/update", "POST", '{"name":null,"machines":[]}'],
     ]);
   });

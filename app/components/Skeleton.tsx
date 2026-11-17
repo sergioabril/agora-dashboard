@@ -28,7 +28,7 @@ export function SkeletonCard({ kind }: { kind: "machine" | "deployment" }) {
             </div>
             <div className="d-id">
               <div className="d-name">{bar(6)}</div>
-              <div className="ep">{bar(24)}</div>
+              <div className="ep-up">{bar(24)}</div>
             </div>
           </div>
         )}

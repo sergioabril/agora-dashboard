@@ -1,12 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { toggleMachine, type DeploymentResult } from "../live";
 import { machineDisplay } from "../model";
-import type { Deployment, Machine } from "../types";
+import type { Deployment, DeploymentKind, Machine } from "../types";
 import { AddedPanel, AddTile, DialogFrame, Field, useDialog, useSubmission, type DialogState } from "./AddMachine";
 import { Status } from "./Led";
 import { MonoSpin } from "./Spinner";
 
 const TEXT = { type: "text", autoComplete: "off" } as const;
+const KINDS: [DeploymentKind, string][] = [
+  ["llm", "chat model · /proxy/v1 by id or as agora, and /agent/v1"],
+  ["image", "image model · /proxy/v1 by id, and the /agent/v1 image tools"],
+];
+// Endpoint placeholder and hint per picked kind ("" = none picked yet).
+const ENDPOINT: Record<DeploymentKind | "", [string, string]> = {
+  "": ["http://spark-1.local:8000/v1", "OpenAI base URL agents use, usually ends in /v1 · the hub GETs <endpoint>/models; any 2xx = up"],
+  llm: ["http://spark-1.local:8000/v1",
+    "OpenAI base URL, usually ends in /v1 · served on the gateway as its model ids and as agora · the hub GETs <endpoint>/models; any 2xx = up"],
+  image: ["http://spark-4.local:8001/v1",
+    "OpenAI Images base URL, usually ends in /v1 · served on /proxy/v1 by its model ids and as the /agent/v1 image tools · the hub GETs <endpoint>/models; any 2xx = up"],
+};
 
 type Props = { dlg: DialogState; machines: Record<string, Machine>; id?: string; deployment?: Deployment };
 
@@ -24,12 +36,14 @@ export function DeploymentDialog({ dlg, machines, id, deployment: d }: Props) {
 // Mounted while the dialog is open, so each open starts from the props and polls never reset what is typed.
 function DeploymentForm({ dlg, machines, id, deployment: d, path }: Props & { path: string }) {
   const save = useSubmission(id ? `update-deployment:${id}` : "add-deployment");
+  const [kind, setKind] = useState<DeploymentKind | "">(d?.kind ?? "");
   const [pick, setPick] = useState({ checked: d?.machines ?? [], head: d?.head ?? "" });
   const [tried, setTried] = useState(false);
   const order = Object.keys(machines);
   const result = save.data as DeploymentResult | undefined;
   const saved = result?.ok ? result.deployment : null;
   const failure = result && !result.ok ? result : null;
+  const errKind = tried && !kind ? "pick a kind" : null;
   const errMachines = tried && !pick.checked.length ? "pick at least one machine" : null;
   const errHead = tried && pick.checked.length && !pick.head ? "pick a head" : null;
   const hid = `dd-${id ?? "new"}`;
@@ -41,7 +55,7 @@ function DeploymentForm({ dlg, machines, id, deployment: d, path }: Props & { pa
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     setTried(true);
     const form = e.currentTarget;
-    const bad = !pick.checked.length ? "input[name=machines]" : !pick.head ? "select[name=head]" : null;
+    const bad = !kind ? "input[name=kind]" : !pick.checked.length ? "input[name=machines]" : !pick.head ? "select[name=head]" : null;
     if (bad) form.querySelector<HTMLElement>(bad)?.focus();
     if (save.busy || bad || !form.reportValidity()) return e.preventDefault();
     save.mark();
@@ -63,6 +77,20 @@ function DeploymentForm({ dlg, machines, id, deployment: d, path }: Props & { pa
       {id && <input type="hidden" name="id" value={id} />}
       <div className="af-grid" hidden={Boolean(saved)}>
         <Field name="name" {...TEXT} required wide defaultValue={d?.name} />
+        <div className="af-f w2">
+          <span className="af-l" id={`${hid}-k`}>kind<i aria-hidden="true">*</i> <span className="muted">· ↑↓ choose</span></span>
+          <div className="rd-list" role="radiogroup" aria-labelledby={`${hid}-k`} aria-invalid={errKind ? true : undefined}>
+            {KINDS.map(([k, desc]) => (
+              <label key={k} className={`rd-row ${k}`}>
+                <input type="radio" className="sr" name="kind" value={k} required checked={kind === k} onChange={() => setKind(k)} />
+                <span className="rd-b" aria-hidden="true" />
+                <span className="rd-n">{k}</span>
+                <span className="rd-d">{desc}</span>
+              </label>
+            ))}
+          </div>
+          {errKind && <p className="af-ferr" role="alert">✗ {errKind}</p>}
+        </div>
         <div className="af-f w2 ck">
           <span className="af-l" id={`${hid}-m`}>machines<i aria-hidden="true">*</i> <span className="muted">· space toggles · ↑↓ move</span></span>
           <div className="ck-list" role="group" aria-labelledby={`${hid}-m`} aria-invalid={errMachines ? true : undefined} onKeyDown={onKeyDown}>
@@ -96,9 +124,9 @@ function DeploymentForm({ dlg, machines, id, deployment: d, path }: Props & { pa
         <Field name="start_command" {...TEXT} required wide defaultValue={d?.start_command} placeholder="/home/agora/<name>/start.sh" aria-describedby={`${hid}-cmd`} />
         <Field name="stop_command" {...TEXT} required wide defaultValue={d?.stop_command} placeholder="/home/agora/<name>/stop.sh" aria-describedby={`${hid}-cmd`} />
         <p className="af-hint w2" id={`${hid}-cmd`}>absolute path, may take arguments · runs on head from the SSH user's home, stdin closed</p>
-        <Field name="endpoint" type="url" autoComplete="off" required wide defaultValue={d?.endpoint} placeholder="http://spark-1.local:8000/v1"
+        <Field name="endpoint" type="url" autoComplete="off" required wide defaultValue={d?.endpoint} placeholder={ENDPOINT[kind][0]}
           aria-describedby={`${hid}-ep`} />
-        <p className="af-hint w2" id={`${hid}-ep`}>OpenAI base URL agents use, usually ends in /v1 · the hub GETs &lt;endpoint&gt;/models; any 2xx = up</p>
+        <p className="af-hint w2" id={`${hid}-ep`}>{ENDPOINT[kind][1]}</p>
       </div>
       {failure && (
         <p className="af-err" role="alert"><b>✗ {failure.status ?? "request failed"}{failure.status === 409 && ` ${failure.code}`}</b> · {failure.message}</p>

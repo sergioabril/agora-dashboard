@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deploymentDisplay, deploymentFailed, deploymentInvolved, deploymentOn, deploymentOpOutlived, machineDisplay, machineInvolved, machineOn,
   machineOpOutlived, withLog,
-  pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone, sortSwitches,
+  gatewayHost, pollInterval, roleLabels, actionLabel, homeAssistantDisplay, switchTone, sortSwitches,
 } from "../app/model";
 import type { Deployment, DeploymentsStatus, Machine, MachinesStatus, Operation } from "../app/types";
 
@@ -11,7 +11,7 @@ const machine = (over: Partial<Machine> = {}): Machine => ({
   name: "M", host: "h", user: "agora", port: 22, key_path: null, plug_entity_id: "switch.m", shutdown_command: "poweroff", device: "dgx-spark", reachable: true, error: null, checked_at: at, shutdown_requested: false, operation: null, ...over,
 });
 const deployment = (over: Partial<Deployment> = {}): Deployment => ({
-  name: "Pro", machines: ["spark-1", "spark-2"], head: "spark-1", start_command: "/s.sh", stop_command: "/t.sh", endpoint: "http://x/",
+  name: "Pro", kind: "llm", machines: ["spark-1", "spark-2"], head: "spark-1", start_command: "/s.sh", stop_command: "/t.sh", endpoint: "http://x/",
   observed_state: "stopped", ready: false, models: [], error: null, checked_at: at, operation: null, ...over,
 });
 const running = (action: string): Operation => ({ action, status: "in_progress", started_at: at, finished_at: null, error: null, output: "" });
@@ -105,13 +105,20 @@ describe("roles, involvement and labels", () => {
 
 describe("polling interval", () => {
   const ms = (m: Machine, active: MachinesStatus["active"] = null): MachinesStatus => ({ machines: { a: m }, active });
-  const ds = (d: Deployment): DeploymentsStatus => ({ deployments: { pro: d }, active: null });
+  const ds = (d: Deployment): DeploymentsStatus => ({ deployments: { pro: d }, active: null, gateway: { host: null, port: 8888, agora: null, image: null } });
   it("is 15 s when idle and 3 s when busy", () => {
     expect(pollInterval(ms(machine()), ds(deployment()), false)).toBe(15000);
     expect(pollInterval(null, null, false)).toBe(15000);
     expect(pollInterval(ms(machine()), ds(deployment()), true)).toBe(3000);
     expect(pollInterval(ms(machine(), { action: "on", target: "a", machines: ["a"] }), null, false)).toBe(3000);
     expect(pollInterval(null, ds(deployment({ operation: running("stop") })), false)).toBe(3000);
+  });
+});
+
+describe("gateway host", () => {
+  it("keeps a remote hub's host and falls back to the page's host for a local hub", () => {
+    expect(gatewayHost("http://192.168.1.20:3333", "http://x:4444/")).toBe("192.168.1.20");
+    for (const hub of ["host.docker.internal", "localhost", "127.0.0.1", "[::1]"]) expect(gatewayHost(`http://${hub}:3333`, "http://[fd7a::5]:4444/")).toBe("[fd7a::5]");
   });
 });
 

@@ -34,6 +34,8 @@ function readConfig(env: NodeJS.ProcessEnv) {
 
 const config = readConfig(process.env);
 
+export const hubUrl = () => config.base;
+
 function detailMessage(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {
