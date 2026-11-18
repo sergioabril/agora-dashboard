@@ -128,7 +128,7 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
             {d.models.map((m) => (
               <span key={m} className="mdl-r">
                 <span className="mdl-id">{m}</span>
-                <CopyButton text={m} label={`Copy model id ${m}`} />
+                {d.kind === "llm" && <CopyButton text={m} label={`Copy model id ${m}`} />}
               </span>
             ))}
           </div>
@@ -151,7 +151,7 @@ export function DeploymentCard({ id, deployment, machines, active, log, openOn, 
           {d.kind === "image" && (
             <>
               <dt>tools</dt>
-              <dd className="tools">generate_image · edit_image <span className="muted">via /agent/v1</span></dd>
+              <dd className="tools">generate_image · edit_image <span className="muted">on /openai/v1</span></dd>
             </>
           )}
           <dt>last</dt>

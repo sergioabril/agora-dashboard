@@ -8,16 +8,16 @@ import { MonoSpin } from "./Spinner";
 
 const TEXT = { type: "text", autoComplete: "off" } as const;
 const KINDS: [DeploymentKind, string][] = [
-  ["llm", "chat model · /proxy/v1 by id or as agora, and /agent/v1"],
-  ["image", "image model · /proxy/v1 by id, and the /agent/v1 image tools"],
+  ["llm", "chat model · on /openai/v1 by id or as agora"],
+  ["image", "image model · backs the gateway's image tools"],
 ];
 // Endpoint placeholder and hint per picked kind ("" = none picked yet).
 const ENDPOINT: Record<DeploymentKind | "", [string, string]> = {
   "": ["http://spark-1.local:8000/v1", "OpenAI base URL agents use, usually ends in /v1 · the hub GETs <endpoint>/models; any 2xx = up"],
   llm: ["http://spark-1.local:8000/v1",
-    "OpenAI base URL, usually ends in /v1 · served on the gateway as its model ids and as agora · the hub GETs <endpoint>/models; any 2xx = up"],
+    "OpenAI chat base URL with image input, usually ends in /v1 · served on the gateway as its model ids and as agora · the hub GETs <endpoint>/models; any 2xx = up"],
   image: ["http://spark-4.local:8001/v1",
-    "OpenAI Images base URL, usually ends in /v1 · served on /proxy/v1 by its model ids and as the /agent/v1 image tools · the hub GETs <endpoint>/models; any 2xx = up"],
+    "OpenAI Images base URL, usually ends in /v1 · backs the gateway's image tools · the hub GETs <endpoint>/models; any 2xx = up"],
 };
 
 type Props = { dlg: DialogState; machines: Record<string, Machine>; id?: string; deployment?: Deployment };
